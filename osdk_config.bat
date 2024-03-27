@@ -3,7 +3,7 @@
 ::
 :: Set the build paremeters
 ::
-SET OSDKADDR=$800
+SET OSDKADDR=$550
 SET OSDKNAME=SOUNDTOY
-SET OSDKFILE=toy soundtoy
-
+SET OSDKFILE=toy soundtoy picture
+SET OSDKDISK=
