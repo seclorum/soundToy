@@ -18,12 +18,12 @@
 
 void Synth();
 
-#define POS_START ((unsigned int)0x0000)
-#define POS_END   ((unsigned int)0xFFFF)
+#define POS_START 		((unsigned int)0x0000)
+#define POS_END   		((unsigned int)0xFFFF)
 #define POS_INITIAL_POSITION ((unsigned int)0xFAA7)
-#define POS_KEYCLICK1 ((unsigned int)0xFB32)
-#define HIRES_START   ((unsigned int)0xA000)
-
+#define POS_KEYCLICK1 	((unsigned int)0xFB32)
+#define HIRES_START   	((unsigned char *)0xA000)
+#define HIRES_END 		((unsigned char *)0xBF3F)
 extern unsigned char currentSound[];
 extern unsigned char BootSound[];
 
@@ -134,9 +134,11 @@ void main()
 	unsigned int i;				// input
 	unsigned char r;
 	unsigned char smode;
-	unsigned int *src, *dst;
+	unsigned char *src, *dst;
 	int j;
+	int m;
 	int hires_mode = 0;
+	int bloop_mode = 0;
 
 	setflags(SCREEN + NOKEYCLICK);
 
@@ -144,8 +146,8 @@ void main()
 	Synth();
 
 	position = POS_INITIAL_POSITION;	// start of ROM
-   	*src = HIRES_START;
-	*dst = HIRES_START;
+	src = HIRES_START;
+	dst = HIRES_START+40;
 
 	while ((k = get()) != APP_QUIT) {
 
@@ -153,73 +155,87 @@ void main()
 			smode = !smode;
 		}
 		else
-		if (k == APP_POS_POSITIVE) {
-			if (position++ >= POS_END) {
-				position = POS_START;
-			}
-		} else if (k == APP_POS_MINUS) {
-			if (position-- < POS_START) {
-				position = POS_END;
-			}
-		} else if (k == APP_RESET) {
-			printf("reset!\n");
-			position = (unsigned int) &BootSound;
+			if (k == APP_POS_POSITIVE) {
+				if (position++ >= POS_END) {
+					position = POS_START;
+				}
+			} else if (k == APP_POS_MINUS) {
+				if (position-- < POS_START) {
+					position = POS_END;
+				}
+			} else if (k == APP_RESET) {
+				printf("reset!\n");
+				position = (unsigned int) &BootSound;
 			//p=POS_KEYCLICK1;
-		} else if (k == APP_RESET_POS) {
-			printf(".\n");
-			position = POS_INITIAL_POSITION;
-		} else if (k == APP_POSITION) {
-			unsigned int v;
-			printf("P:");
-			scanf("%x", &v);
-			position = v;
-			printf("\nv:%x p:%x", v, position);
-		} else if (k == APP_HELP) {
-			printHelp();
-		} else if (k == APP_HIRES) {
-			if (hires_mode == 1) {
-				hires_mode = 0;
-				text();
-				continue;
-			}
+			} else if (k == APP_RESET_POS) {
+				printf(".\n");
+				position = POS_INITIAL_POSITION;
+			} else if (k == APP_POSITION) {
+				unsigned int v;
+				printf("P:");
+				scanf("%x", &v);
+				position = v;
+				printf("\nv:%x p:%x", v, position);
+			} else if (k == APP_HELP) {
+				printHelp();
+			} else if (k == APP_HIRES) {
+				hires();
+				fastbloop();
+#if 0 
+				
+				hires_mode++; if (hires_mode >= 3) hires_mode = 0;
 
-			hires_mode = 1;
-			position = HIRES_START;
+				if (hires_mode==0){
+					text();
+					continue;
+				}
 
-			hires();
+
+				position = (unsigned int)HIRES_START;
 //          memcpy((unsigned char*)0xa000, OverlayLabel, 8000);
 
-			j = HIRES_START;
-
-			do {
-			//for (j = HIRES_START; j <= 0xBF3F; j++) {
-
-				if (j % 24) {
-					srandom(peek(0x276));
+				if (hires_mode == 1) {
+					spamit();
 				}
-/*
+
+				if (hires_mode == 2) {
+				j = (unsigned int)HIRES_START;
 				do {
-					r=random(1) % 255;
-				} while  ( ( (r>>3) == 1) || ( (r>>3) == 3) );
-*/
-				do {
-					r = random(1) % 255;
-					// r=peek(position);
-				} while
+					do {
+						r = qrandomJ(peek(0x276)) % 255;
+					} while
 					(((r & 0x78) == 0x08 || (r & 0x78) == 0x18) ||
 					 ((r & 0x78) == 0x88 || (r & 0x78) == 0x98));
 
-				poke(j, r);
+					poke(j, r);
 
-			} while (++j <= 0xBF3F);
-
-		}
- 		if (k == APP_MEMHAK) {
-			if (hires_mode == 1) {
+				} while (++j <= (unsigned int)HIRES_END);
+#endif
 
 			}
+			if (k == APP_MEMHAK) {
+				bloop_mode++;
+				if (bloop_mode > 3)
+					bloop_mode = 0;
+
+				if (hires_mode == 1) {
+					for (src = (void *)HIRES_START, dst = (void *)(HIRES_START + (8*40)); 
+						src < HIRES_END - (8*40) - 4; 
+						src += bloop_mode, dst += bloop_mode) {
+
+						memcpy(src+(1*40), dst+(1*40), bloop_mode);
+					memcpy(src+(2*40), dst+(2*40), bloop_mode);
+					memcpy(src+(3*40), dst+(3*40), bloop_mode);
+					memcpy(src+(4*40), dst+(4*40), bloop_mode);
+					memcpy(src+(5*40), dst+(5*40), bloop_mode);
+					memcpy(src+(6*40), dst+(6*40), bloop_mode);
+					memcpy(src+(7*40), dst+(7*40), bloop_mode);
+					memcpy(src+(8*40), dst+(8*40), bloop_mode);
+
+				}
+			}
 		}
- 
+
 		{
 			loadTable(position);
 
@@ -250,6 +266,8 @@ void main()
 				poke(position, oldval);
 			}
 
+			if (bloop_mode = 1) {
+			}
 
 		}
 
