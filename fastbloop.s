@@ -1,6 +1,5 @@
-_fastbloop
+_fastbloop:
 
-    ; Pointers and working registers
     lda $276           ; Load seed for random function
     sta seed
 
@@ -8,7 +7,6 @@ start_loop:
     ldx #$00           ; X-register for indexing the table
     lda seed
     jsr _blooprand      ; Call your custom random generator
-    and #$FF           ; Ensure result is within a byte range
     tax                ; Store random result in X for indexing
 
     lda random_table, x ; Get a valid random value from the table
@@ -23,7 +21,8 @@ start_loop:
     bcc start_loop     ; Otherwise, loop back
 
 done:
-    rts                ; Return from the subroutine
+    lda random_table, x ; Return the last random value in A register
+    rts                ; Return to C with the value in A
 
 ; -----------------------------------------------------
 ; Random number generator (_blooprand)

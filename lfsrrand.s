@@ -4,14 +4,14 @@ _lfsr
 
 ; Seed the LFSR with an initial value
 ; Input: A = low byte, X = high byte (seed values)
-seed_lfsr:
+_seed_lfsr:
     sta _lfsr          ; Store A in the low byte of LFSR
     stx _lfsr+1        ; Store X in the high byte of LFSR
     rts               ; Return
 
 ; LFSR random number generator
 ; Output: A = random number between 0–255, excluding 8-18 and 88-98
-get_random:
+_lfsr_random:
     ; Load the current LFSR value
     lda _lfsr
     ldx _lfsr+1
@@ -37,7 +37,7 @@ check_exclusion:
     bcs check_next      ; If number is above 18, go to next check
 
     ; If we are here, the number is in the excluded range 8-18, generate again
-    jmp get_random
+    jmp _lfsr_random
 
 check_next:
     ; Check for exclusion range 88-98 (0x58–0x62)
@@ -47,12 +47,12 @@ check_next:
     bcs return_random   ; If number is above 98, it's valid
 
     ; If we are here, the number is in the excluded range 88-98, generate again
-    jmp get_random
+    jmp _lfsr_random
 
 return_random:
     rts               ; Return with the valid random number in A
 
 ; Example usage:
 ; 1. Call 'seed_lfsr' to initialize the LFSR.
-; 2. Call 'get_random' to obtain random numbers, excluding 8-18 and 88-98.
+; 2. Call '_lfsr_random' to obtain random numbers, excluding 8-18 and 88-98.
 
