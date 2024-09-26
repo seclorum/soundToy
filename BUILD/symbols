@@ -21,7 +21,7 @@
 0078 reg6
 007a reg7
 0550 osdk_start
-3e9b osdk_stack
+403c osdk_stack
 0561 retstack
 0bbb _main
 0562 enter
@@ -260,5 +260,11 @@ bf3f ADDR_END
 3e0e done
 3e13 _blooprandBack
 3e1a _bloopNoEor
-3f9b osdk_check
-3f9f osdk_end
+4000 _lfsr
+4002 seed_lfsr
+4009 get_random
+4025 check_exclusion
+403b return_random
+4030 check_next
+413c osdk_check
+4140 osdk_end
