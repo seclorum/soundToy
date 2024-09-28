@@ -129,26 +129,32 @@ void SynthZP(unsigned char HI, unsigned char LO)
 
 void play_(){
 
-	int j, r;
+	int j;
+	int k;
+
+	volatile char r;
+	char s;
+
+	s = peek(0x276);
+	seed_lfsr(s);
 
 	j = (unsigned int)HIRES_START;
-
-	// seed_lfsr(peek(0x276));
+	k = (unsigned int)HIRES_START + 160;
 
 	do {
 
 		do {
-			
 			r  = qrandomJ(peek(0x276)) % 255;
-			// r = lfsr_random();
-
 		} while (((r & 0x78) == 0x08 || (r & 0x78) == 0x18) || ((r & 0x78) == 0x88 || (r & 0x78) == 0x98));
+
+		// r = lfsr_random();
 
 		// r = fastbloop();
 
 		poke(j, r);
-		// printf("j: %x", j); printf("r:%x\n", r);
-	} while (++j <= (unsigned int)HIRES_END);
+		printf("j: %x r: %x\n", j, r);
+
+	} while (++j < k);
 
 }
 

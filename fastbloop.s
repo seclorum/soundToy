@@ -1,45 +1,3 @@
-_fastbloop:
-
-    lda $276           ; Load seed for random function
-    sta seed
-
-start_loop:
-    ldx #$00           ; X-register for indexing the table
-    lda seed
-    jsr _blooprand      ; Call your custom random generator
-    tax                ; Store random result in X for indexing
-
-    lda random_table, x ; Get a valid random value from the table
-    sta $0200, y       ; Poke the random value into memory
-    iny                ; Increment Y to poke the next address
-
-    cpy #$FF           ; Compare Y with the low byte of $3FFF
-    bne start_loop     ; If Y is not $FF, continue
-    lda $02FF          ; Check the high byte of the address
-    cmp #$3F           ; Compare with high byte of $3FFF
-    beq done           ; If we’ve reached the end, jump to done
-    bcc start_loop     ; Otherwise, loop back
-
-done:
-    lda random_table, x ; Return the last random value in A register
-    rts                ; Return to C with the value in A
-
-; -----------------------------------------------------
-; Random number generator (_blooprand)
-_blooprand:
-    ldy #8
-    lda $00
-_blooprandBack:
-    asl
-    rol $FF
-    bcc _bloopNoEor
-    eor #$39
-_bloopNoEor:
-    dey
-    bne _blooprandBack
-    sta $00
-    cmp #0
-    rts
 
 ; -----------------------------------------------------
 ; Random number table (pre-filtered values)
@@ -63,4 +21,90 @@ random_table:
     .byte $F0, $F1, $F2, $F3, $F4, $F5, $F6, $F7
 
     ; Seed for random number generation
-seed: .byte $00
+seed: .byte $42
+_fastbloop:
+
+    lda $276           ; Load seed for random function
+    sta seed
+
+    lda #$02           ; Initialize high byte for storing in page $0200
+    sta addr_high      ; Store in high byte variable
+    lda #$00           ; Initialize low byte
+    sta addr_low
+
+    lda #$00           ; Initialize iteration counter
+    sta iteration_count
+
+start_loop:
+    ldx #$00           ; X-register for indexing the table
+    lda seed
+    jsr _blooprand      ; Call random generator
+    tax                ; Store random result in X for indexing
+
+    lda random_table, x ; Get a random value from the table
+
+    ; Calculate the address to store the value
+    lda addr_high       ; Load the high byte of the address
+    sta temp_high       ; Store in temporary variable
+    lda addr_low        ; Load the low byte of the address
+    sta temp_low        ; Store in temporary variable
+
+    ; Store the value at the address (absolute indexed)
+    sta temp_store      ; Save the random value temporarily
+    ldy #$00            ; Clear Y for addressing calculation
+
+    ; Form full address manually
+    lda temp_low        ; Load low byte of address
+    sta $00             ; Save it to memory
+    lda temp_high       ; Load high byte of address
+    sta $01             ; Save it to memory
+
+    ; Store value using absolute indexed addressing
+    lda temp_store
+    sta ($00), y        ; Store value at the address
+
+    ; Increment the low byte of the address
+    inc addr_low        
+    lda addr_low        ; Check if low byte has overflowed
+    bne continue_loop   ; If not overflowed, continue
+
+    inc addr_high       ; Increment high byte if low byte overflowed
+
+continue_loop:
+    ; Increment the iteration counter
+    inc iteration_count
+    lda iteration_count
+    cmp #$10            ; Set the loop to run for 16 iterations (or another value)
+    beq done            ; If iterations reached the limit, exit the loop
+
+    jmp start_loop      ; Otherwise, loop back
+
+done:
+    lda random_table, x  ; Return the last random value in A register
+    rts                 ; Return to C with value in A
+
+; -----------------------------------------------------
+; Random number generator (_blooprand)
+_blooprand:
+    ldy #8
+    lda $00
+_blooprandBack:
+    asl
+    rol $FF
+    bcc _bloopNoEor
+    eor #$39
+_bloopNoEor:
+    dey
+    bne _blooprandBack
+    sta $00
+    cmp #0
+    rts
+
+; Temporary variables for address calculations
+temp_high:     .byte $00
+temp_low:      .byte $00
+temp_store:    .byte $00
+addr_low:      .byte $00  ; High and low byte variables
+addr_high:     .byte $00
+iteration_count: .byte $00 ; Loop counter
+

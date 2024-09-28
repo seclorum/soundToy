@@ -5,5 +5,5 @@
 ::
 SET OSDKADDR=$550
 SET OSDKNAME=SOUNDTOY
-SET OSDKFILE=toy soundtoy picture qrandom spamit fastbloop lfsrrand
+SET OSDKFILE=toy soundtoy picture qrandom spamit fastbloop 
 SET OSDKDISK=
