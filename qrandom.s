@@ -70,3 +70,42 @@ return_random:
 ; 1. Call 'seed_lfsr' to initialize the LFSR.
 ; 2. Call '_lfsr_random' to obtain random numbers, excluding 8-18 and 88-98.
 
+
+// Chema's RNG from https://forum.defence-force.org/viewtopic.php?p=19108&hilit=random#p19108
+; A real random generator... 
+randseed .word $dead 	; will it be $dead again? 
+_randgen
+.(
+   lda randseed     	; get old lsb of seed. 
+   ora $308		; lsb of VIA T2L-L/T2C-L. 
+   rol			; this is even, but the carry fixes this. 
+   adc $304		; lsb of VIA TK-L/T1C-L.  This is taken mod 256. 
+   sta randseed     	; random enough yet. 
+   sbc randseed+1   	; minus the hsb of seed... 
+   rol			; same comment than before.  Carry is fairly random. 
+   sta randseed+1   	; we are set. 
+
+check_exc:
+    cmp #8
+    bcc return_randgen   ; If number is below 8, it's valid
+    cmp #19
+    bcs check_nxt      ; If number is above 18, go to next check
+
+    ; If we are here, the number is in the excluded range 8-18, generate again
+    jmp _randgen
+
+check_nxt:
+    ; Check for exclusion range 88-98 (0x58–0x62)
+    cmp #88
+    bcc return_randgen   ; If number is below 88, it's valid
+    cmp #99
+    bcs return_randgen   ; If number is above 98, it's valid
+
+    ; If we are here, the number generated is in the excluded range, so regenerate 
+    jmp _randgen
+
+return_randgen:
+   rts			; see you later alligator. 
+.)
+
+

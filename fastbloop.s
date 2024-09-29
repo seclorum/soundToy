@@ -38,7 +38,7 @@ _fastbloop:
 start_loop:
     ldx #$00           ; X-register for indexing the table
     lda seed
-    jsr _blooprand      ; Call random generator
+    jsr _randgen        ; _qrandomJ      ; Call random generator
     tax                ; Store random result in X for indexing
 
     lda random_table, x ; Get a random value from the table
@@ -83,22 +83,6 @@ done:
     lda random_table, x  ; Return the last random value in A register
     rts                 ; Return to C with value in A
 
-; -----------------------------------------------------
-; Random number generator (_blooprand)
-_blooprand:
-    ldy #8
-    lda $00
-_blooprandBack:
-    asl
-    rol $FF
-    bcc _bloopNoEor
-    eor #$39
-_bloopNoEor:
-    dey
-    bne _blooprandBack
-    sta $00
-    cmp #0
-    rts
 
 ; Temporary variables for address calculations
 temp_high:     .byte $00

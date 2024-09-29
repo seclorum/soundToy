@@ -127,7 +127,7 @@ void SynthZP(unsigned char HI, unsigned char LO)
 	call(0xF590);
 }
 
-void play_(){
+void gen_rnd_colors(){
 
 	int j;
 	int k;
@@ -135,24 +135,30 @@ void play_(){
 	volatile char r;
 	char s;
 
-	s = peek(0x276);
-	seed_lfsr(s);
+	// s = peek(0x276);
+	// seed_lfsr(s);
 
 	j = (unsigned int)HIRES_START;
 	k = (unsigned int)HIRES_START + 160;
 
 	do {
 
+		// // Somewhat slow C-based implementation with assembly RNG - works
 		do {
 			r  = qrandomJ(peek(0x276)) % 255;
 		} while (((r & 0x78) == 0x08 || (r & 0x78) == 0x18) || ((r & 0x78) == 0x88 || (r & 0x78) == 0x98));
 
+		// Linear-feedback shift register method
 		// r = lfsr_random();
 
+		// table-based with 
 		// r = fastbloop();
 
+		// Chema's randgen:
+		// r == randgen();
+
 		poke(j, r);
-		printf("j: %x r: %x\n", j, r);
+		// printf("j: %x r: %x\n", j, r);
 
 	} while (++j < k);
 
@@ -213,7 +219,7 @@ void main()
 				hires();
 				// memcpy((unsigned char*)0xa000, OverlayLabel, 8000);
 				hires_mode++; if (hires_mode >= 3) hires_mode = 0;
-				play_();
+				gen_rnd_colors();
 				// if (hires_mode==0){
 				// 	text();
 				// 	continue;
@@ -223,7 +229,7 @@ void main()
 				// 	spamit();
 				// }
 				// if (hires_mode == 2) {
-				// 	play_();
+				// 	gen_rnd_colors();
 				// }
 
 				// if (hires_mode == 3) {
