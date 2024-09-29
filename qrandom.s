@@ -1,3 +1,5 @@
+; qrandom.s - experiment with different ways to generate 'valid' colour values randomly
+
 _qrandomJ
 		ldy #8
 		lda $0

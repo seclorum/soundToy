@@ -1,3 +1,4 @@
+; qrandom.s - experiment with different ways to generate 'valid' colour values randomly using a lookup table
 
 ; -----------------------------------------------------
 ; Random number table (pre-filtered values)
