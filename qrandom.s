@@ -1,5 +1,4 @@
 ; qrandom.s - experiment with different ways to generate 'valid' colour values randomly
-
 _qrandomJ
 		ldy #8
 		lda $0
@@ -11,6 +10,21 @@ _qrback
 _qrnoEor
 		dey
 		bne _qrback
+;		jmp return_qrandomJ
+
+_qrCont
+	    cmp #24
+    	bcc _qrnd_next		   	; If number is below 8, it's valid
+    	cmp #28
+    	bcc _qrandomJ      		; If number below 28, regen
+
+_qrnd_next:
+    	cmp #152
+    	bcc return_qrandomJ
+    	cmp #156
+    	bcc _qrandomJ
+
+return_qrandomJ:
 		sta $0
 		cmp #0
 		rts
@@ -76,6 +90,7 @@ return_random:
 // Chema's RNG from https://forum.defence-force.org/viewtopic.php?p=19108&hilit=random#p19108
 ; A real random generator... 
 randseed .word $dead 	; will it be $dead again? 
+
 _randgen
 .(
    lda randseed     	; get old lsb of seed. 
@@ -87,7 +102,6 @@ _randgen
    rol			; same comment than before.  Carry is fairly random. 
    sta randseed+1   	; we are set. 
 
-check_exc:
     cmp #8
     bcc return_randgen   ; If number is below 8, it's valid
     cmp #19
@@ -110,4 +124,32 @@ return_randgen:
    rts			; see you later alligator. 
 .)
 
+
+
+// Chema's RNG from https://forum.defence-force.org/viewtopic.php?p=19108&hilit=random#p19108
+; A real random generator... 
+_randgenJ
+.(
+   lda randseed     	; get old lsb of seed. 
+   ora $308		; lsb of VIA T2L-L/T2C-L. 
+   rol			; this is even, but the carry fixes this. 
+   adc $304		; lsb of VIA TK-L/T1C-L.  This is taken mod 256. 
+   sta randseed     	; random enough yet. 
+   sbc randseed+1   	; minus the hsb of seed... 
+   rol			; same comment than before.  Carry is fairly random. 
+   sta randseed+1   	; we are set. 
+
+    cmp #24
+    bcc check_nxtJ		   	; If number is below 8, it's valid
+    cmp #28
+    bcc _randgenJ      		; If number below 28, regen
+check_nxtJ:
+    cmp #152
+    bcc return_randgenJ
+    cmp #156
+    bcc _randgenJ
+
+return_randgenJ:
+   rts			; see you later alligator. 
+.)
 

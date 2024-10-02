@@ -139,14 +139,19 @@ void gen_rnd_colors(){
 	// seed_lfsr(s);
 
 	j = (unsigned int)HIRES_START;
-	k = (unsigned int)HIRES_START + 160;
+	k = (unsigned int)HIRES_START + 320;
+	// k = (unsigned int)HIRES_END;
 
 	do {
+
+		// r = 16+((qrandomJ(peek(0x276)) % 255) & 7);
 
 		// // Somewhat slow C-based implementation with assembly RNG - works
 		do {
 			r  = qrandomJ(peek(0x276)) % 255;
 		} while (((r & 0x78) == 0x08 || (r & 0x78) == 0x18) || ((r & 0x78) == 0x88 || (r & 0x78) == 0x98));
+
+		// r  = qrandomJ(peek(0x276)) % 255;
 
 		// Linear-feedback shift register method
 		// r = lfsr_random();
@@ -220,6 +225,11 @@ void main()
 				// memcpy((unsigned char*)0xa000, OverlayLabel, 8000);
 				hires_mode++; if (hires_mode >= 3) hires_mode = 0;
 				gen_rnd_colors();
+				cgen_test();
+
+				// randcolorgen();
+				// randcogtab();
+
 				// if (hires_mode==0){
 				// 	text();
 				// 	continue;
@@ -269,7 +279,7 @@ void main()
 				unsigned char L;
 				L = position << 8;
 				H = position &= 0xFF00;
-				printf("\nZP:%x %x %x\n", position, H, L);
+				//printf("\nZP:%x %x %x\n", position, H, L);
 
 				SynthZP(H, L);
 			}
