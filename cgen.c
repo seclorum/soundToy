@@ -9,8 +9,8 @@
 
 
 // Predefined opcode block (LDA, STA sequence for 8 rows)
-unsigned char pregenCodeBlock[] = {
-    0xA2, 0x00,             // LDX #$00 (initialize X register)
+unsigned char pregenCodeBlock[24][51] = {
+    {0xA2, 0x00,             // LDX #$00 (initialize X register)
     0xBD, 0x00, 0x00,       // LDA $0000,X (placeholder for source address)
     0x9D, 0x00, 0x00,       // STA $0000,X (placeholder for destination address)
     0xBD, 0x00, 0x00,       // LDA $0000,X (row 2)
@@ -27,8 +27,8 @@ unsigned char pregenCodeBlock[] = {
     0x9D, 0x00, 0x00,       // STA $0000,X
     0xBD, 0x00, 0x00,       // LDA $0000,X (row 8)
     0x9D, 0x00, 0x00,       // STA $0000,X
-    0x60                    // RTS (return from subroutine)
-};
+    0x60},                  // RTS (return from subroutine)
+};   
 
 // Function to modify the block with correct addresses based on cell index
 void genCellCopy(int sourceX, int sourceY, int destX, int destY) {
@@ -42,13 +42,13 @@ void genCellCopy(int sourceX, int sourceY, int destX, int destY) {
     for (pos = 0; pos < BLOCK_HEIGHT; pos++) {
         // Source address modification
         source_addr = source_base + (pos * ROW_SIZE);
-        pregenCodeBlock[3 + pos * 6] = source_addr & 0xFF;       // Low byte
-        pregenCodeBlock[4 + pos * 6] = (source_addr >> 8) & 0xFF; // High byte
+        pregenCodeBlock[0][3 + pos * 6] = source_addr & 0xFF;       // Low byte
+        pregenCodeBlock[0][4 + pos * 6] = (source_addr >> 8) & 0xFF; // High byte
 
         // Destination address modification
         dest_addr = dest_base + (pos * ROW_SIZE);
-        pregenCodeBlock[6 + pos * 6] = dest_addr & 0xFF;         // Low byte
-        pregenCodeBlock[7 + pos * 6] = (dest_addr >> 8) & 0xFF;  // High byte
+        pregenCodeBlock[0][6 + pos * 6] = dest_addr & 0xFF;         // Low byte
+        pregenCodeBlock[0][7 + pos * 6] = (dest_addr >> 8) & 0xFF;  // High byte
     }
 }
 
@@ -61,68 +61,32 @@ int cgen_test() {
 	// simple example
 
 //	while ((key = get()) != 'Q') {
+	level=3;
 	while (1) {
-			rando+=2; if (rando>10) rando = 0;
-			genCellCopy(rando, 0, rando, 0); call(&pregenCodeBlock);
-			genCellCopy(rando, 0, rando, rando); call(&pregenCodeBlock);
-			genCellCopy(rando, 0, 0, rando); call(&pregenCodeBlock);
-#if 0
-   	 		//rando  = qrandomJ(peek(0x276)) % 255 / 24;
-			genCellCopy(rando, 0, 0, 0); call(&pregenCodeBlock);
-			//genCellCopy(1, 0, 0, 1); call(&pregenCodeBlock);
-			genCellCopy(2, 0, 0, 2); call(&pregenCodeBlock);
-			//genCellCopy(2, 0, 0, 3); call(&pregenCodeBlock);
-			genCellCopy(1, 0, 0, 4); call(&pregenCodeBlock);
-			genCellCopy(1, 0, 1, 4); call(&pregenCodeBlock);
-			genCellCopy(1, 0, 2, 4); call(&pregenCodeBlock);
-			genCellCopy(1+rando, 0, 3, 4); call(&pregenCodeBlock);
-			//genCellCopy(0, 0, 0, 5); call(&pregenCodeBlock);
-			//genCellCopy(3, 0, 0, 6); call(&pregenCodeBlock);
-			genCellCopy(4+rando, 0, 0, 7); call(&pregenCodeBlock);
-			genCellCopy(4+rando, 0, 2, 7); call(&pregenCodeBlock);
-			genCellCopy(4+rando, 0, 3, 7); call(&pregenCodeBlock);
-			genCellCopy(4+rando, 0, 4, 7); call(&pregenCodeBlock);
-			genCellCopy(4+rando, 0, 6, 7); call(&pregenCodeBlock);
-			//genCellCopy(3, 0, 0, 8); call(&pregenCodeBlock);
-			genCellCopy(1, 0, 0, 9); call(&pregenCodeBlock);
-			genCellCopy(1, 0, 0, 10); call(&pregenCodeBlock);
-//
-      		genCellCopy(3+rando, 0, 1, 0); call(&pregenCodeBlock);
-			genCellCopy(2+rando, 0, 1, 1); call(&pregenCodeBlock);
-			genCellCopy(1+rando, 0, 1, 2); call(&pregenCodeBlock);
-			genCellCopy(0+rando, 0, 1, 3); call(&pregenCodeBlock);
- 
-     		genCellCopy(3+rando, 0, 2, 0); call(&pregenCodeBlock);
-			genCellCopy(2+rando, 0, 2, 1); call(&pregenCodeBlock);
-			genCellCopy(1+rando, 0, 2, 2); call(&pregenCodeBlock);
-			genCellCopy(0+rando, 0, 2, 3); call(&pregenCodeBlock);
-     
- 			genCellCopy(0+rando, 0, 3, 0); call(&pregenCodeBlock);
-			genCellCopy(1+rando, 0, 3, 1); call(&pregenCodeBlock);
-			genCellCopy(2+rando, 0, 3, 2); call(&pregenCodeBlock);
-			genCellCopy(3+rando, 0, 3, 3); call(&pregenCodeBlock);
+			rando++; if (rando>20) rando = 0;
+			genCellCopy(rando, 0, rando, 0); call(&pregenCodeBlock[0]);
 
-  			genCellCopy(0+rando, 0, 5, 0); call(&pregenCodeBlock);
-			genCellCopy(1+rando, 0, 5, 1); call(&pregenCodeBlock);
-			genCellCopy(2+rando, 0, 5, 2); call(&pregenCodeBlock);
-			genCellCopy(3+rando, 0, 5, 3); call(&pregenCodeBlock);
- 
-		level=3;
 		for (pos=0;pos<24;pos++) {
-   	 		rando  = qrandomJ(peek(0x276)) % 255 / 24;
    	 		genCellCopy(0+rando, 0, pos, level); call(&pregenCodeBlock);
     		genCellCopy(1+rando, 0, pos+1, level++); call(&pregenCodeBlock);
     		genCellCopy(2+rando, 0, pos+2, level++); call(&pregenCodeBlock);
     		genCellCopy(3+rando, 0, pos+3, level); call(&pregenCodeBlock);
 			level = 5;
-    		genCellCopy(23-rando, 0, pos+1, level++); call(&pregenCodeBlock);
+    		genCellCopy(23-rando, 0, 	pos+1, level++); call(&pregenCodeBlock);
+			genCellCopy(0, 20, 		 	pos, level - 1); call(&pregenCodeBlock);
+
     		genCellCopy(22-rando-1, 0, pos+2, level++); call(&pregenCodeBlock);
+			genCellCopy(0, 20,		 	pos+1, level - 1); call(&pregenCodeBlock);
+
+
     		genCellCopy(21-rando-2, 0, pos+3, level++); call(&pregenCodeBlock);
+			genCellCopy(0, 20,		 	pos+2, level - 1); call(&pregenCodeBlock);
+
     		genCellCopy(20-rando-3, 0, pos+4, level++); call(&pregenCodeBlock);
+			genCellCopy(0, 20,		 	pos+3, level - 1); call(&pregenCodeBlock);
 
    	 		genCellCopy(6+rando, 0, 1, 1); call(&pregenCodeBlock);
 		}
-#endif
 	}
  
 
