@@ -139,8 +139,8 @@ void gen_rnd_colors(){
 	// seed_lfsr(s);
 
 	j = (unsigned int)HIRES_START;
-	k = (unsigned int)HIRES_START + 320;
-	// k = (unsigned int)HIRES_END;
+	k = (unsigned int)HIRES_START + 320*3;
+//	k = (unsigned int)HIRES_END;
 
 	do {
 
