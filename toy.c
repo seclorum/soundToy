@@ -146,22 +146,17 @@ gen_rnd_colors ()
   // s = peek(0x276);
   // seed_lfsr(s);
 
+  // j .. memory .. k
   j = (unsigned int) HIRES_START;
   k = (unsigned int) HIRES_START + 320 * 3;
-//      k = (unsigned int)HIRES_END;
+  //k = (unsigned int)HIRES_END;
 
   do
     {
-
       // r = 16+((qrandomJ(peek(0x276)) % 255) & 7);
-
       // // Somewhat slow C-based implementation with assembly RNG - works
-      do
-	{
-	  r = qrandomJ (peek (0x276)) % 255;
-	}
-      while (((r & 0x78) == 0x08 || (r & 0x78) == 0x18)
-	     || ((r & 0x78) == 0x88 || (r & 0x78) == 0x98));
+      do { r = qrandomJ (peek (0x276)) % 255; }
+      while (((r & 0x78) == 0x08 || (r & 0x78) == 0x18) || ((r & 0x78) == 0x88 || (r & 0x78) == 0x98));
 
       // r  = qrandomJ(peek(0x276)) % 255;
 
@@ -185,12 +180,11 @@ gen_rnd_colors ()
 void
 main ()
 {
-  unsigned char k;		// key pressed
+  unsigned char kp;		// key pressed
   unsigned int position;	// position
   unsigned int i;		// input
   unsigned char r;
   unsigned char smode;
-  unsigned char *src, *dst;
   int j;
   int m;
   int hires_mode = 0;
@@ -198,46 +192,45 @@ main ()
 
   setflags (SCREEN + NOKEYCLICK);
 
+  smode = 1;
+  position = POS_INITIAL_POSITION;	// start of ROM
+
   printHelp ();
   Synth ();
 
-  position = POS_INITIAL_POSITION;	// start of ROM
-  src = HIRES_START;
-  dst = HIRES_START + 40;
-
-  while ((k = get ()) != APP_QUIT)
+  while ((kp = key() ) != APP_QUIT)
     {
 
-      if (k == APP_SOUND_ONOFF)
+      if (kp == APP_SOUND_ONOFF)
 	{
 	  smode = !smode;
 	}
-      else if (k == APP_POS_POSITIVE)
+      else if (kp == APP_POS_POSITIVE)
 	{
 	  if (position++ >= POS_END)
 	    {
 	      position = POS_START;
 	    }
 	}
-      else if (k == APP_POS_MINUS)
+      else if (kp == APP_POS_MINUS)
 	{
 	  if (position-- < POS_START)
 	    {
 	      position = POS_END;
 	    }
 	}
-      else if (k == APP_RESET)
+      else if (kp == APP_RESET)
 	{
 	  printf ("reset!\n");
 	  position = (unsigned int) &BootSound;
 	  //p=POS_KEYCLICK1;
 	}
-      else if (k == APP_RESET_POS)
+      else if (kp == APP_RESET_POS)
 	{
 	  printf (".\n");
 	  position = POS_INITIAL_POSITION;
 	}
-      else if (k == APP_POSITION)
+      else if (kp == APP_POSITION)
 	{
 	  unsigned int v;
 	  printf ("P:");
@@ -245,24 +238,30 @@ main ()
 	  position = v;
 	  printf ("\nv:%x p:%x", v, position);
 	}
-      else if (k == APP_HELP)
+      else if (kp == APP_HELP)
 	{
 	  printHelp ();
 	}
-      else if (k == APP_HIRES)
+      else if (kp == APP_HIRES)
 	{
 
 	  hires ();
+ 
+	  hires_mode = 1;
 
 	  // memcpy((unsigned char*)0xa000, OverlayLabel, 8000);
-	  hires_mode++;
-	  if (hires_mode >= 3)
-	    hires_mode = 0;
 
 	  gen_rnd_colors ();
-
 	  position = generateCells ();
+ 
+      printf ("\nP:%x\n", position);
+      loadTable (position);
+      hexDump ((unsigned char *) position, 16);
 
+      //dumpPitch (CHAN_A);
+      //dumpPitch (CHAN_B);
+      //dumpPitch (CHAN_C);
+ 
 	  // randcolorgen();
 	  // randcogtab();
 
@@ -283,8 +282,11 @@ main ()
 	  //      oldval = oldval ^= 128;
 	  //      poke(position, oldval);
 	}
-      else if (k == APP_MEMHAK)
+      else if (kp == APP_MEMHAK)
 	{
+  	  // unsigned char *src, *dst;
+      // src = HIRES_START;
+      // dst = HIRES_START + 40;
 	  // dst = (void *)(HIRES_START + (8*40);
 	  // for (src = (void *)HIRES_START; 
 	  //      src < HIRES_END - (8*40) - 4; 
@@ -298,17 +300,9 @@ main ()
 	  //      memcpy(src+(6*40), dst+(6*40), bloop_mode);
 	  //      memcpy(src+(7*40), dst+(7*40), bloop_mode);
 	  //      memcpy(src+(8*40), dst+(8*40), bloop_mode);
-	}
+	} 
 
-      loadTable (position);
-
-      printf ("\nP:%x\n", position);
-      hexDump ((unsigned char *) position, 16);
-
-      dumpPitch (CHAN_A);
-      dumpPitch (CHAN_B);
-      dumpPitch (CHAN_C);
-
+/*
       if (smode)
 	{
 	  Synth ();
@@ -323,6 +317,7 @@ main ()
 
 	  SynthZP (H, L);
 	}
+*/
 
     }
 
