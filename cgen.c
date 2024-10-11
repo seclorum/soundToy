@@ -264,6 +264,9 @@ int generateCells ()
 	  xp += st;
 	  yp += st;
 
+	  if (kp == 'C') {
+	  }
+
       if (kp == 'A') { cx -= 1; };
       if (kp == 'D') { cx += 1; };
       if (kp == 'W') { cy -= 1; };
@@ -284,8 +287,12 @@ int generateCells ()
 	  if (cx > MAX_CB_X) { cx = MAX_CB_X; };
 	  if (cx < 2) { st = 1; };
  
+	  printf("c:%d,%d,i:%d,%d p:%d,%d\r", 
+				cx,cy, ipx,ipy, xp,yp);
+
   	  r = qrandomJ (peek (0x276)) % 22;
 	  if (r < 12) { yp -= st; };
+
 
 	  genCellCopy (STOY1, 1, r, xp, yp + (r/4));
 	  genCellCopy (STOY2, 2, r, xp, yp + 4);
