@@ -56,7 +56,7 @@ void printHelp()
 	cls();
 	paper(0);
 	ink(5);
-	printf("\nsoundtoy::\nA toy for exploring Oric ROM sounds.\n");
+	printf("\nsoundtoy:: 1.1.0\nA toy for exploring Oric ROM sounds.\n");
 	printf("(by seclorum)\n\n");
 	printf("Key: Function:\n\n");
 	printf(" ?   Display this help.\n");

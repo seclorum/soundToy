@@ -13,6 +13,8 @@ V1.0.0	- Basic first version - use to explore the Oric ROM data to use as
 		  your Oric - use the '?' key to get help and some example addresses to
 		  try out.
 
+V1.1.0	- Added HIRES video synth mode.  TODO: connect both synthesizers in pleasing, absttract ways.
+
 Lets hear of your discoveries!  :)
 
 --
