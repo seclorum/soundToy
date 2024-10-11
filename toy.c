@@ -214,7 +214,7 @@ main ()
 	}
       else if (kp == APP_POS_MINUS)
 	{
-	  if (position-- < POS_START)
+	  if ((signed int)position-- < (signed int)POS_START)
 	    {
 	      position = POS_END;
 	    }

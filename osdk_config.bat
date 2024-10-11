@@ -5,7 +5,7 @@
 ::
 SET OSDKADDR=$550
 SET OSDKNAME=SOUNDTOY
-SET OSDKFILE=cgen toy soundtoy picture qrandom 
+SET OSDKFILE=cgen toy soundtoy picture qrandom attrsyn
 :: spamit fastbloop randcog rantab
 SET OSDKDISK=
 
