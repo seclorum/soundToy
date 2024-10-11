@@ -18,22 +18,14 @@ Lets hear of your discoveries!  :)
 --
 seclorum
 
-
-![](/screenshots/Screenshot 2024-10-02 at 17.21.29.png)
-
-![](/screenshots/Screenshot 2024-10-02 at 23.18.07.png)
-
-![](/screenshots/Screenshot 2024-10-06 at 18.41.44.png)
-
-![](/screenshots/Screenshot 2024-10-06 at 19.24.09.png)
-
-![](/screenshots/Screenshot 2024-10-11 at 13.42.30.png)
-
-![](/screenshots/Screenshot 2024-10-11 at 13.42.43.png)
-
-![](/screenshots/Screenshot 2024-10-11 at 13.43.04.png)
-
-![](/screenshots/Screenshot 2024-10-11 at 13.44.12.png)
-
-![](/screenshots/Screenshot 2024-10-11 at 14.34.30.png)
-
+![](https://github.com/seclorum/soundToy/blob/main/screenshots/Screenshot%202024-10-02%20at%2017.21.29.png)
+![](https://github.com/seclorum/soundToy/blob/main/screenshots/Screenshot 2024-10-02 at 17.21.29.png)
+![](https://github.com/seclorum/soundToy/blob/main/screenshots/Screenshot 2024-10-02 at 23.18.07.png)
+![](https://github.com/seclorum/soundToy/blob/main/screenshots/Screenshot 2024-10-06 at 18.41.44.png)
+![](https://github.com/seclorum/soundToy/blob/main/screenshots/Screenshot 2024-10-06 at 19.24.09.png)
+![](https://github.com/seclorum/soundToy/blob/main/screenshots/Screenshot 2024-10-11 at 13.42.30.png)
+![](https://github.com/seclorum/soundToy/blob/main/screenshots/Screenshot 2024-10-11 at 13.42.43.png)
+[](https://github.com/seclorum/soundToy/blob/main/screenshots/Screenshot 2024-10-11 at 13.43.04.png)
+![](https://github.com/seclorum/soundToy/blob/main/screenshots/Screenshot 2024-10-11 at 13.44.12.png)
+![](https://github.com/seclorum/soundToy/blob/main/screenshots/Screenshot 2024-10-11 at 14.34.30.png)
+attrand.png
