@@ -27,6 +27,7 @@ void Synth();
 extern unsigned char currentSound[];
 extern unsigned char BootSound[];
 
+
 #define CHAN_A (0)
 #define CHAN_B (2)
 #define CHAN_C (4)
@@ -45,6 +46,7 @@ extern unsigned char BootSound[];
 #define APP_HIRES			'G'
 #define APP_MEMHAK 			'M'
 #define APP_QUIT 			'Q'
+#define APP_CAPTURE 		'C'
 
 
 // from picture.s
@@ -178,24 +180,28 @@ void main()
 	unsigned int position;		// position
 	unsigned int i;				// input
 	unsigned char r;
-	unsigned char smode;
+	unsigned char shouldPlay;
 	int j;
 	int m;
-	int hires_mode = 0;
-	int bloop_mode = 0;
+	int e_mode = 0;				// edit mode
 
 	setflags(SCREEN + NOKEYCLICK);
 
-	smode = 1;
+	shouldPlay = 1;
 	position = POS_INITIAL_POSITION;	// start of ROM
 
 	printHelp();
 	Synth();
 
 	while ((kp = key()) != APP_QUIT) {
+	
+		if (e_mode) {
+			cellTick(kp);
+			continue;
+		}
 
 		if (kp == APP_SOUND_ONOFF) {
-			smode = !smode;
+			shouldPlay = !shouldPlay;
 		} 
 		else 
 		if (kp == APP_POS_POSITIVE) {
@@ -238,81 +244,65 @@ void main()
 		else 
 		if (kp == APP_HIRES) {
 
-			hires();
+			e_mode = 1;
 
-			hires_mode = 1;
+			hires();
 
 			// memcpy((unsigned char*)0xa000, OverlayLabel, 8000);
 
-			gen_rnd_colors();
-
-			position = generateCells();
-
-			printf("hiresmode:%x\n", position);
-			loadTable(position);
-			hexDump((unsigned char *) position, 16);
-
-
-			//dumpPitch (CHAN_A);
-			//dumpPitch (CHAN_B);
-			//dumpPitch (CHAN_C);
-
+ 			// spamit();
 			// randcolorgen();
 			// randcogtab();
 
-			// if (hires_mode==0){
-			//      text();
-			//      continue;
-			// }
+			gen_rnd_colors();
 
-			// if (hires_mode == 1) {
-			//      spamit();
-			// }
-			// if (hires_mode == 2) {
-			//      gen_rnd_colors();
-			// }
+			printf("pos: mode:%x\n", position, e_mode);
+			loadTable(position);
+			hexDump((unsigned char *) position, 16);
 
-			// if (hires_mode == 3) {
-			//      int oldval = peek(position);
-			//      oldval = oldval ^= 128;
-			//      poke(position, oldval);
+			dumpPitch (CHAN_A);
+			dumpPitch (CHAN_B);
+			dumpPitch (CHAN_C);
+
 		} 
 		else 
 		if (kp == APP_MEMHAK) {
+			// static const int segSize = 0;
 			// unsigned char *src, *dst;
 			// src = HIRES_START;
 			// dst = HIRES_START + 40;
 			// dst = (void *)(HIRES_START + (8*40);
 			// for (src = (void *)HIRES_START; 
 			//      src < HIRES_END - (8*40) - 4; 
-			//      src += bloop_mode, dst += bloop_mode) {
-
-			//      memcpy(src+(1*40), dst+(1*40), bloop_mode);
-			//      memcpy(src+(2*40), dst+(2*40), bloop_mode);
-			//      memcpy(src+(3*40), dst+(3*40), bloop_mode);
-			//      memcpy(src+(4*40), dst+(4*40), bloop_mode);
-			//      memcpy(src+(5*40), dst+(5*40), bloop_mode);
-			//      memcpy(src+(6*40), dst+(6*40), bloop_mode);
-			//      memcpy(src+(7*40), dst+(7*40), bloop_mode);
-			//      memcpy(src+(8*40), dst+(8*40), bloop_mode);
+			//      src += segSize, dst += segSize) {
+			//      memcpy(src+(1*40), dst+(1*40), segSize);
+			//      memcpy(src+(2*40), dst+(2*40), segSize);
+			//      memcpy(src+(3*40), dst+(3*40), segSize);
+			//      memcpy(src+(4*40), dst+(4*40), segSize);
+			//      memcpy(src+(5*40), dst+(5*40), segSize);
+			//      memcpy(src+(6*40), dst+(6*40), segSize);
+			//      memcpy(src+(7*40), dst+(7*40), segSize);
+			//      memcpy(src+(8*40), dst+(8*40), segSize);
+			// }
 		}
 
 
-		if (smode) {
+		if (shouldPlay) {
 //			Synth();
 			unsigned char H;
 			unsigned char L;
 			L = position << 8;
 			H = position & 0xFF00;
-			printf("\nZP:%x %x %x\n", position, H, L);
+			//printf("\nZP:%x %x %x\n", position, H, L);
 			SynthZP(H, L);
 
-			smode = 0;
+			shouldPlay = 0;
 		}
 
 	}
 
-//  loadTable ((unsigned int) &BootSound);
+	text();
 
+//  loadTable ((unsigned int) &BootSound);
 //  Synth ();
 }
