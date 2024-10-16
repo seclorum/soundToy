@@ -193,7 +193,7 @@ void main()
 	printHelp();
 	Synth();
 
-	while ((kp = key()) != APP_QUIT) {
+	while ((kp = ReadKey()) != APP_QUIT) {
 	
 		if (e_mode) {
 			cellTick(kp);
