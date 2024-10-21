@@ -31,15 +31,15 @@ void Synth();
 
 extern unsigned char OverlayLabel[];
 
-#define CGENDIR_INIT_ 0x11
+#define CGENSTATE_INIT_ 0x11
 
 enum {
-	CGENDIR_INIT = CGENDIR_INIT_,
-	CGENDIR_FORWARD = 1,
-	CGENDIR_BACKWARD = -1,
-	CGENDIR_QUIT = 0x10
+	CGENSTATE_INIT = CGENSTATE_INIT_,
+	CGENSTATE_FORWARD = 1,
+	CGENSTATE_BACKWARD = -1,
+	CGENSTATE_QUIT = 0x10
 };
- 
+
 #define CHAN_A (0)
 #define CHAN_B (2)
 #define CHAN_C (4)
@@ -60,7 +60,15 @@ enum {
 #define APP_QUIT 			'Q'
 #define APP_CAPTURE 		'C'
 #define APP_SPACE			' '
-
+#define APP_CURSOR_L		'A'
+#define APP_CURSOR_R		'D'
+#define APP_CURSOR_U		'W'
+#define APP_CURSOR_D		'S'
+#define APP_INPUT_L			'J'
+#define APP_INPUT_R			'L'
+#define APP_INPUT_U			'I'
+#define APP_INPUT_D			'K'
+#define APP_BLAST			'B'
 
 
 // cgen
@@ -111,24 +119,15 @@ enum {
 // 256 numbers 
 //unsigned char table[256];
 
-// Assembly routine to do the search
-//extern unsigned char FindRandomNumber(unsigned char *table);
+//static int rando;             // random
+//static int fil;               // not too much random: filter
 
-// Predefined op code block (LDA, STA sequence for 8 rows)
+static int anim_x;				// xpos
+static int anim_y;				// anim_yos
 
-// The raw address of source and destinations in the cell copy
-unsigned int cell_source_addr;
-unsigned int cell_dest_addr;
- 
-//static int rando;				// random
-//static int fil;				// not too much random: filter
+int r_val;						// some randomite
 
-static int pos_x;				// xpos
-static int pos_y;				// pos_yos
-
-int r_val;					// some randomite
-
-static int g_state = CGENDIR_INIT_;	// state, 0xFF=initialize
+static int g_state = CGENSTATE_INIT_;	// state, 0xFF=initialize
 
 static int cursor_x;			// cursor x
 static int cursor_y;			// cursor y
@@ -136,8 +135,16 @@ static int cursor_y;			// cursor y
 static int input_x;				// input pos x
 static int input_y;				// input pos y
 
-unsigned int source_base;
- 
+
+// Assembly routine to do the search
+//extern unsigned char FindRandomNumber(unsigned char *table);
+
+// The raw address of source and destinations in the cell copy
+unsigned int cell_source_addr;
+unsigned int cell_dest_addr;
+unsigned int cell_source_base;
+
+// Predefined op code block (LDA, STA sequence for MAX_CB_CELLS rows)
 unsigned char cellOpArray[MAX_CB_CELLS][51] = {
 
 	{
@@ -219,8 +226,8 @@ unsigned char cellOpArray[MAX_CB_CELLS][51] = {
 	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
 	 0x9D, 0x00, 0x00,			// STA $0000,X
 	 0x60 },					// RTS (return from subroutine)
- 
- 	{
+
+	{
 	 0xA2, 0x00,				// LDX #$00 (initialize X register)
 	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
 	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
@@ -339,7 +346,7 @@ unsigned char cellOpArray[MAX_CB_CELLS][51] = {
 	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
 	 0x9D, 0x00, 0x00,			// STA $0000,X
 	 0x60 },					// RTS (return from subroutine)
- 
+
 	{
 	 0xA2, 0x00,				// LDX #$00 (initialize X register)
 	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
@@ -462,6 +469,17 @@ unsigned char cellOpArray[MAX_CB_CELLS][51] = {
 
 };
 
+
+char *charHexStr(unsigned char value)
+{
+	static char hexString[3];
+	static const char hexLookup[] = "0123456789ABCDEF";
+	hexString[0] = hexLookup[(value >> 4) & 0x0F];
+	hexString[1] = hexLookup[value & 0x0F];
+	hexString[2] = '\0';
+	return hexString;
+}
+
 void hexDump(unsigned char *addr, int length)
 {
 	int cnt = 0;
@@ -497,13 +515,13 @@ loadTable(unsigned int address)
 	currentSound[12] = peek(address + 12);
 	currentSound[13] = peek(address + 13);
 }
- 
+
 // Function to modify the block with correct addresses based on cell index
 // X,Y values are 22x40
 void genCellCopy(int cell, int sourceX, int sourceY, int destX, int destY)
 {
 
-	unsigned int source_base =
+	unsigned int buffer_base =
 		SOURCE_BUFFER_START + (sourceY * ROW_SIZE * BLOCK_HEIGHT) +
 		(sourceX * 1);
 	unsigned int dest_base =
@@ -516,7 +534,7 @@ void genCellCopy(int cell, int sourceX, int sourceY, int destX, int destY)
 		int pos;
 		for (pos = 0; pos < BLOCK_HEIGHT; pos++) {
 			// Source address modification
-			cell_source_addr = source_base + (pos * ROW_SIZE);
+			cell_source_addr = buffer_base + (pos * ROW_SIZE);
 			cellOpArray[cell][3 + pos * 6] = cell_source_addr & 0xFF;	// Low byte
 			cellOpArray[cell][4 + pos * 6] = (cell_source_addr >> 8) & 0xFF;	// High byte
 
@@ -561,19 +579,20 @@ void cellBlast(unsigned int ix, unsigned int iy)
 	int x;
 	int y;
 
-	c=0;
-	x=11;
-	
-	for (c=0;c<MAX_CB_Y;c++) {
-   		genCellCopy(c++, ix, iy, x, c);
-		printf("blast:%d,%d:%d,%d\n", ix,iy,x,c);
-		call((unsigned int)&cellOpArray[0]);
+	c = 0;
+	x = 11;
+
+	for (c = 0; c < MAX_CB_CELLS; c++) {
+		genCellCopy(c++, ix, iy, c, 10);
+		printf("blast:%d,%d:%d,%d\n", ix, iy, x, c);
+		call((unsigned int) &cellOpArray[0]);
 	}
 
 
 }
 
-void triggerCurrent(int position) {
+void triggerCurrent(int position)
+{
 	hexDump((unsigned char *) position, 16);
 	loadTable(position);
 	Synth();
@@ -584,9 +603,9 @@ void triggerCurrent(int position) {
 	//printf("\nZP:%x %x %x\n", position, H, L);
 	//SynthZP(H, L);
 }
- 
 
-void cellRandomPlayer(unsigned char kp)
+
+void cellTick(unsigned char kp)
 {
 
 /*
@@ -601,147 +620,73 @@ void cellRandomPlayer(unsigned char kp)
   genCellCopy (SAVE1, rando + 4, 0, pos, level);
 */
 
-	if (g_state == CGENDIR_INIT) {
-		g_state = CGENDIR_FORWARD;
-
-		pos_y = 12;
-		pos_x = 12;
-
-		cursor_x = 3;
-		cursor_y = 3;
-
-		input_x = 1;
-		input_y = 1;
-	}
 //  initTable();  // Initialize the table with values
 //  check_rantab(); 
-	pos_x += g_state;
-	pos_y += g_state;
 
-	if (kp == 'C') {
-		// capture the current cell
-		printf("in: %d,%d", input_x, input_y);
-		source_base = SOURCE_BUFFER_START + (input_y * ROW_SIZE * BLOCK_HEIGHT) + (input_x* 1);
-    	hexDump((unsigned char *)source_base, 8);
-	}
+	anim_x += g_state;
+	anim_y += g_state;
 
-	if (kp == 'A') {
-		cursor_x -= 1;
-	};
-	if (kp == 'D') {
-		cursor_x += 1;
-	};
-	if (kp == 'W') {
-		cursor_y -= 1;
-	};
-	if (kp == 'S') {
-		cursor_y += 1;
-	};
-
-	if (kp == 'J') {
-		input_x -= 1;
-	};
-	if (kp == 'L') {
-		input_x += 1;
-	};
-	if (kp == 'I') {
-		input_y -= 1;
-	};
-	if (kp == 'K') {
-		input_y += 1;
-	};
-
-	if (pos_y > MAX_CB_Y) {
-		pos_y = 2;
-	};
-	if (pos_y < 2) {
-		pos_y = MAX_CB_Y;
-	};
-	if (pos_x > MAX_CB_X) {
-		g_state = CGENDIR_BACKWARD;
-	};
-	if (pos_x < 2) {
-		g_state = CGENDIR_FORWARD;
-	};
-
-	if (cursor_y > MAX_CB_Y) {
-		cursor_y = 2;
-	};
-	if (cursor_y < 2) {
-		cursor_y = MAX_CB_Y;
-	};
-	if (cursor_x > MAX_CB_X) {
-		cursor_x = MAX_CB_X;
-	};
-	if (cursor_x < 2) {
-		g_state = CGENDIR_FORWARD;
-	};
-
-	printf("c:%d,%d,i:%d,%d p:%d,%d\r", cursor_x, cursor_y, input_x, input_y, pos_x, pos_y);
 
 	r_val = qrandomJ(peek(0x276)) % 22;
+
 	if (r_val < 12) {
-		pos_y -= g_state;
+		anim_y -= g_state;
 	};
 
-	genCellCopy(STOY1, 1, r_val, pos_x, pos_y + (r_val / 4));
-	genCellCopy(STOY2, 2, r_val, pos_x, pos_y + 4);
-	genCellCopy(STOY3, 3, r_val, pos_x, pos_y + (r_val / 4));
-	genCellCopy(SAVE1, cursor_x, cursor_y, 0, 0);
+	printf("c:%d,%d,i:%d,%d p:%d,%d r:%d\r", cursor_x, cursor_y, input_x, input_y, anim_x, anim_y, r_val);
+
+    // the random stuff
+	genCellCopy(STOY1, 1, r_val, anim_x, anim_y + (r_val / 4));
+	genCellCopy(STOY2, 2, r_val, anim_x, anim_y + 4);
+	genCellCopy(STOY3, 3, r_val, anim_x, anim_y + (r_val / 4));
+	genCellCopy(SAVE1, cursor_x, cursor_y, MAX_CB_X, MAX_CB_Y);
+	
+	// the input cursor goes to the output destination
+
 	genCellCopy(CURS1, input_x, input_y, cursor_x, cursor_y);
-	genCellCopy(CURS2, input_x, input_y, 20, 20);
+	//genCellCopy(ANIM1, input_x, input_y, 8, 9);
+	//genCellCopy(ANIM2, input_x, input_y, 8, 10);
+	//genCellCopy(ANIM3, input_x, input_y, 8, 11);
+	//genCellCopy(ANIM4, 8, 9, 7, 9);
+	//genCellCopy(ANIM5, 8, 10, 7, 10);
+	//genCellCopy(ANIM6, 8, 11, 7, 11);
 
-	genCellCopy(ANIM1, cursor_x, cursor_x, 		8, 8);
-	genCellCopy(ANIM2, input_x, input_y, 	8, 9);
-	genCellCopy(ANIM3, cursor_x, cursor_x, 		8, 10);
-	genCellCopy(ANIM4, 1, 1, 		8, 11);
-	genCellCopy(ANIM5, 2, 2, 		8, 12);
-	genCellCopy(ANIM6, 3, 1, 		8, 13);
+	//genCellCopy(CURS1, cursor_x, cursor_x, 8, 12);
+ 	//genCellCopy(CURS1, 1, 1, MAX_CB_X - 1, MAX_CB_Y -1);
+ 	genCellCopy(CURS2, 1, 1, MAX_CB_X - 1, MAX_CB_Y -1);
+	genCellCopy(ANIM1, 1, 1, MAX_CB_X - 1, MAX_CB_Y -1);
+	genCellCopy(ANIM2, 1, 1, MAX_CB_X - 1, MAX_CB_Y -1);
+	genCellCopy(ANIM3, 1, 1, MAX_CB_X - 1, MAX_CB_Y -1);
+	genCellCopy(ANIM4, 1, 1, MAX_CB_X - 1, MAX_CB_Y -1);
+	genCellCopy(ANIM5, 1, 1, MAX_CB_X - 1, MAX_CB_Y -1);
+	genCellCopy(ANIM6, 1, 1, MAX_CB_X - 1, MAX_CB_Y -1);
 
- 	genCellCopy(COLR1, cursor_x, cursor_x, 		8, 8);
-	genCellCopy(COLR2, input_x, input_y, 	8, 9);
-	genCellCopy(MONO1, cursor_x, cursor_x, 		8, 10);
-	genCellCopy(MONO2, 1, 1, 		8, 11);
+	genCellCopy(MONO1, 1, 1, MAX_CB_X - 1, MAX_CB_Y - 1);
+	genCellCopy(MONO2, 2, 2, MAX_CB_X - 4, MAX_CB_Y - 4);
 
-  	if (kp == 'B') {
-		cellBlast(input_x, input_y);
-	};
+	//genCellCopy(COLR1, 1, 1, MAX_CB_X - 1, MAX_CB_Y -1);
+	//genCellCopy(COLR2, 1, 1, MAX_CB_X - 1, MAX_CB_Y -1);
+	genCellCopy(COLR1, cursor_x, cursor_x, MAX_CB_X / 2, MAX_CB_Y / 2);
+	genCellCopy(COLR2, input_x, input_y, MAX_CB_X / 3, MAX_CB_Y / 3);
 
- 	if (kp == APP_SPACE ) {
-   		triggerCurrent(source_base);
-   	}
- 
- 
-	call((unsigned int)&cellOpArray[0]);
+	call((unsigned int) &cellOpArray[0]);
 
 }
 
 
- 
+
 void cellDemo(unsigned char ik)
 {
-	unsigned char kp='D';
+	unsigned char kp = 'D';
 	int iter;
 
-   	for (iter=0;iter<99;iter++) { 
-		cellRandomPlayer(kp);
-		if (iter%8) {
+	for (iter = 0; iter < 99; iter++) {
+		cellTick(kp);
+		if (iter % 8) {
 			kp = 'A';
 		}
 	}
 }
-
- 
-//
-// Tick for a cell with input key
-//
-void cellTick(unsigned char ik)
-{
-	//cellDemo(ik);
-	cellRandomPlayer(ik);
-}
- 
-
 
 
 
@@ -766,15 +711,6 @@ void printHelp()
 	printf("Explore the Oric ROM for more sounds!\n");
 }
 
-char *charHexStr(unsigned char value)
-{
-	static char hexString[3];
-	static const char hexLookup[] = "0123456789ABCDEF";
-	hexString[0] = hexLookup[(value >> 4) & 0x0F];
-	hexString[1] = hexLookup[value & 0x0F];
-	hexString[2] = '\0';
-	return hexString;
-}
 
 
 
@@ -858,63 +794,139 @@ void main()
 	Synth();
 
 	while ((kp = key()) != APP_QUIT) {
-	
+
+ 		if (kp == APP_RESET) {
+			printf("reset!\n");
+			position = (unsigned int) &BootSound;
+			//position=POS_KEYCLICK1;
+			cursor_x = 2; cursor_y = 2;
+			input_x = 1; input_y = 1;
+			anim_y = 12;
+			anim_x = 12;
+			g_state = CGENSTATE_FORWARD;
+		} 
+
 		if (e_mode) {
+
+			if (kp == APP_CAPTURE) {
+				// capture the current cell
+				printf("Cin: %d,%d", input_x, input_y);
+				cell_source_base =
+					SOURCE_BUFFER_START +
+					(input_y * ROW_SIZE * BLOCK_HEIGHT) + (input_x * 1);
+				hexDump((unsigned char *) cell_source_base, 8);
+			}
+
+			if (kp == APP_CURSOR_L) {
+				cursor_x -= 1;
+			};
+
+			if (kp == APP_CURSOR_R) {
+				cursor_x += 1;
+			};
+
+			if (kp == APP_CURSOR_U) {
+				cursor_y -= 1;
+			};
+
+			if (kp == APP_CURSOR_D) {
+				cursor_y += 1;
+			};
+
+			if (kp == APP_INPUT_L) {
+				input_x -= 1;
+			};
+
+			if (kp == APP_INPUT_R) {
+				input_x += 1;
+			};
+
+			if (kp == APP_INPUT_U) {
+				input_y -= 1;
+			};
+			if (kp == APP_INPUT_D) {
+				input_y += 1;
+			};
+
+			if (anim_y > MAX_CB_Y) {
+				anim_y = 2;
+			};
+
+			if (anim_y < 2) {
+				anim_y = MAX_CB_Y;
+			};
+
+			if (anim_x > MAX_CB_X) {
+				g_state = CGENSTATE_BACKWARD;
+			};
+
+			if (anim_x < 2) {
+				g_state = CGENSTATE_FORWARD;
+			};
+
+			if (cursor_y > MAX_CB_Y) {
+				cursor_y = 2;
+			};
+
+			if (cursor_y < 2) {
+				cursor_y = MAX_CB_Y;
+			};
+
+			if (cursor_x > MAX_CB_X) {
+				cursor_x = MAX_CB_X;
+			};
+			if (cursor_x < 2) {
+				g_state = CGENSTATE_FORWARD;
+			};
+
+			if (kp == APP_BLAST) {
+				cellBlast(input_x, input_y);
+			};
+
+			if (kp == APP_SPACE) {
+				triggerCurrent(cell_source_base);
+			}
+
 			cellTick(kp);
+
 			continue;
 		}
 
 		if (kp == APP_SOUND_ONOFF) {
 			shouldPlay = !shouldPlay;
-		} 
-		else 
-		if (kp == APP_POS_POSITIVE) {
+		} else if (kp == APP_POS_POSITIVE) {
 			position++;
 			if (position >= POS_END) {
 				position = POS_START;
 			}
 			printf("\np:%x", position);
-		} 
-		else 
-		if (kp == APP_POS_MINUS) {
-			if (position-- < POS_START) {
+		} else if (kp == APP_POS_MINUS) {
+			position--;
+			if (position < POS_START) {
 				position = POS_END;
 			}
 			printf("\np:%x", position);
-		} 
-		else 
-		if (kp == APP_RESET) {
-			printf("reset!\n");
-			position = (unsigned int) &BootSound;
-			//p=POS_KEYCLICK1;
-		} 
-		else 
-		if (kp == APP_RESET_POS) {
+		} else if (kp == APP_RESET_POS) {
 			printf(".\n");
 			position = POS_INITIAL_POSITION;
-		} 
-		else 
-		if (kp == APP_POSITION) {
+		} else if (kp == APP_POSITION) {
 			unsigned int v;
 			printf("P:");
 			scanf("%x", &v);
 			position = v;
 			printf("\nv:%x p:%x", v, position);
-		} 
-		else 
-		if (kp == APP_HELP) {
+		} else if (kp == APP_HELP) {
 			printHelp();
-		} 
-		else 
-		if (kp == APP_HIRES) {
+		} else if (kp == APP_HIRES) {
 
+			// cellTick
 			e_mode = 1;
 
 			hires();
 
 			// memcpy((unsigned char*)0xa000, OverlayLabel, 8000);
 
- 			// spamit();
+			// spamit();
 			// randcolorgen();
 			// randcogtab();
 
@@ -924,13 +936,11 @@ void main()
 			loadTable(position);
 			hexDump((unsigned char *) position, 16);
 
-			dumpPitch (CHAN_A);
-			dumpPitch (CHAN_B);
-			dumpPitch (CHAN_C);
+			dumpPitch(CHAN_A);
+			dumpPitch(CHAN_B);
+			dumpPitch(CHAN_C);
 
-		} 
-		else 
-		if (kp == APP_MEMHAK) {
+		} else if (kp == APP_MEMHAK) {
 			// static const int segSize = 0;
 			// unsigned char *src, *dst;
 			// src = HIRES_START;
@@ -948,16 +958,14 @@ void main()
 			//      memcpy(src+(7*40), dst+(7*40), segSize);
 			//      memcpy(src+(8*40), dst+(8*40), segSize);
 			// }
-		}
-		else 
-		if (kp == APP_SPACE ) {
+		} else if (kp == APP_SPACE) {
 			triggerCurrent(position);
 		}
 
 	}
 
-  text();
+	text();
 
-  loadTable ((unsigned int) &BootSound);
-  Synth ();
+	loadTable((unsigned int) &BootSound);
+	Synth();
 }
