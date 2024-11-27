@@ -7,13 +7,17 @@ which included some nice synthesizer capabilitiies in the form of the 8192 sound
 
 soundtoy gives you a way of experimenting with the synthesizer of your Oric-1/Atmos.
 
-V1.0.0	- Basic first version - use to explore the Oric ROM data to use as
+V0.0.1	- Basic first version - use to explore the Oric ROM data to use as
 		  seeds to the 8192 synthesizer registers.  Use 'j' and 'k' keys to step
 		  through ROM addresses to listen to the various 'presets' available in
 		  your Oric - use the '?' key to get help and some example addresses to
 		  try out.
 
-V1.1.0	- Added HIRES video synth mode.  TODO: connect both synthesizers in pleasing, absttract ways.
+V0.0.2	- Added HIRES video synth mode.  TODO: connect both synthesizers in pleasing, absttract ways.
+
+V0.0.3  - Exploring the RANDOM nature of things.  The colour-bar that is generated in
+HIRES ("G") mode of soundtoy, represents a playground of colourful 'sprites' which have been pre-filtered to ensure no attribute colour-clash occurs when they are placed adjacent to each other .. At this stage, I am exploring/hacking around, and things don't quite work properly yet, but the controls are there to drive into interesting territory.
+
 
 Lets hear of your discoveries!  :)
 
