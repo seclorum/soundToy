@@ -76,16 +76,17 @@ enum {
 #define DESTINATION_BUFFER_START 0xA000 + (320*3)
 
 #define ROW_SIZE 40
+#define COL_SIZE 22
 #define BLOCK_HEIGHT 8
 
-// be sure to update cellOpArray
-#define MAX_CB_CELLS 16
+// be sure to update displayInstructions
+#define MAX_CB_CELLS 40
 
 #define MAX_CB_X 40
 #define MAX_CB_Y MAX_CB_CELLS
 
 
-// aliases
+// aliases for positions in the displayInstructions
 #define STOY1 0
 #define STOY2 1
 #define STOY3 2
@@ -102,6 +103,9 @@ enum {
 #define MONO2 13
 #define COLR1 14
 #define COLR2 15
+#define UIRI1 16
+#define UIRI2 17
+#define UIRI3 18
 
 /*
 #define MONO5 16
@@ -114,6 +118,11 @@ enum {
 #define COLR6 23
 */
 
+#define UI_Y 20
+#define UI_STOR1 2
+#define UI_STOR2 4
+#define UI_STOR3 6
+
 
 // A lookup table to filter out values from random quickly
 // 256 numbers 
@@ -122,6 +131,7 @@ enum {
 //static int rando;             // random
 //static int fil;               // not too much random: filter
 
+// The animated x/y cell
 static int anim_x;				// xpos
 static int anim_y;				// anim_yos
 
@@ -129,12 +139,17 @@ int r_val;						// some randomite
 
 static int g_state = CGENSTATE_INIT_;	// state, 0xFF=initialize
 
+
+// The current cursor position
 static int cursor_x;			// cursor x
 static int cursor_y;			// cursor y
 
+// The current 'cell' from which input is derived
 static int input_x;				// input pos x
 static int input_y;				// input pos y
 
+static int ui_x; 
+static int ui_y; 
 
 // Assembly routine to do the search
 //extern unsigned char FindRandomNumber(unsigned char *table);
@@ -145,9 +160,8 @@ unsigned int cell_dest_addr;
 unsigned int cell_source_base;
 
 // Predefined op code block (LDA, STA sequence for MAX_CB_CELLS rows)
-unsigned char cellOpArray[MAX_CB_CELLS][51] = {
-
-	{
+unsigned char displayInstructions[MAX_CB_CELLS][51] = {
+ 	{
 	 0xA2, 0x00,				// LDX #$00 (initialize X register)
 	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
 	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
@@ -166,66 +180,6 @@ unsigned char cellOpArray[MAX_CB_CELLS][51] = {
 	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
 	 0x9D, 0x00, 0x00,			// STA $0000,X
 	 0xEA },					// NOP ( RTS at last ll ]
-
-	{
-	 0xA2, 0x00,				// LDX #$00 (initialize X register)
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
-	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
-	 0x9D, 0x00, 0x00,			// STA $0000,X
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
-	 0x9D, 0x00, 0x00,			// STA $0000,X
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
-	 0x9D, 0x00, 0x00,			// STA $0000,X
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
-	 0x9D, 0x00, 0x00,			// STA $0000,X
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
-	 0x9D, 0x00, 0x00,			// STA $0000,X
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
-	 0x9D, 0x00, 0x00,			// STA $0000,X
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
-	 0x9D, 0x00, 0x00,			// STA $0000,X
-	 0xEA },					// NOP ( RTS at last ll ]
-
-	{
-	 0xA2, 0x00,				// LDX #$00 (initialize X register)
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
-	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
-	 0x9D, 0x00, 0x00,			// STA $0000,X
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
-	 0x9D, 0x00, 0x00,			// STA $0000,X
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
-	 0x9D, 0x00, 0x00,			// STA $0000,X
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
-	 0x9D, 0x00, 0x00,			// STA $0000,X
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
-	 0x9D, 0x00, 0x00,			// STA $0000,X
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
-	 0x9D, 0x00, 0x00,			// STA $0000,X
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
-	 0x9D, 0x00, 0x00,			// STA $0000,X
-	 0xEA },					// NOP ( RTS at last ll ]
-
-	{
-	 0xA2, 0x00,				// LDX #$00 (initialize X register)
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
-	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
-	 0x9D, 0x00, 0x00,			// STA $0000,X
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
-	 0x9D, 0x00, 0x00,			// STA $0000,X
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
-	 0x9D, 0x00, 0x00,			// STA $0000,X
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
-	 0x9D, 0x00, 0x00,			// STA $0000,X
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
-	 0x9D, 0x00, 0x00,			// STA $0000,X
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
-	 0x9D, 0x00, 0x00,			// STA $0000,X
-	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
-	 0x9D, 0x00, 0x00,			// STA $0000,X
-	 0x60 },					// RTS (return from subroutine)
 
 	{
 	 0xA2, 0x00,				// LDX #$00 (initialize X register)
@@ -345,7 +299,547 @@ unsigned char cellOpArray[MAX_CB_CELLS][51] = {
 	 0x9D, 0x00, 0x00,			// STA $0000,X
 	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
 	 0x9D, 0x00, 0x00,			// STA $0000,X
-	 0x60 },					// RTS (return from subroutine)
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+ 
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
+
+	{
+	 0xA2, 0x00,				// LDX #$00 (initialize X register)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)
+	 0x9D, 0x00, 0x00,			// STA $0000,X (placeholder for destination address)
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 2)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 3)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 4)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 5)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 6)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 7)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xBD, 0x00, 0x00,			// LDA $0000,X (row 8)
+	 0x9D, 0x00, 0x00,			// STA $0000,X
+	 0xEA },					// NOP ( RTS at last ll ]
 
 	{
 	 0xA2, 0x00,				// LDX #$00 (initialize X register)
@@ -516,9 +1010,9 @@ loadTable(unsigned int address)
 	currentSound[13] = peek(address + 13);
 }
 
-// Function to modify the block with correct addresses based on cell index
-// X,Y values are 22x40
-void genCellCopy(int cell, int sourceX, int sourceY, int destX, int destY)
+// Set the Display Instruction at Cell
+// X,Y values 40x20
+void setDI(int cell, int sourceX, int sourceY, int destX, int destY)
 {
 
 	unsigned int buffer_base =
@@ -535,13 +1029,13 @@ void genCellCopy(int cell, int sourceX, int sourceY, int destX, int destY)
 		for (pos = 0; pos < BLOCK_HEIGHT; pos++) {
 			// Source address modification
 			cell_source_addr = buffer_base + (pos * ROW_SIZE);
-			cellOpArray[cell][3 + pos * 6] = cell_source_addr & 0xFF;	// Low byte
-			cellOpArray[cell][4 + pos * 6] = (cell_source_addr >> 8) & 0xFF;	// High byte
+			displayInstructions[cell][3 + pos * 6] = cell_source_addr & 0xFF;	// Low byte
+			displayInstructions[cell][4 + pos * 6] = (cell_source_addr >> 8) & 0xFF;	// High byte
 
 			// Destination address modification
 			cell_dest_addr = dest_base + (pos * ROW_SIZE);
-			cellOpArray[cell][6 + pos * 6] = cell_dest_addr & 0xFF;	// Low byte
-			cellOpArray[cell][7 + pos * 6] = (cell_dest_addr >> 8) & 0xFF;	// High byte
+			displayInstructions[cell][6 + pos * 6] = cell_dest_addr & 0xFF;	// Low byte
+			displayInstructions[cell][7 + pos * 6] = (cell_dest_addr >> 8) & 0xFF;	// High byte
 		}
 	}
 }
@@ -583,10 +1077,10 @@ void cellBlast(unsigned int ix, unsigned int iy)
 	x = 11;
 
 	for (c = 0; c < MAX_CB_CELLS; c++) {
-		genCellCopy(c++, ix, iy, c, 10);
-		printf("blast:%d,%d:%d,%d\n", ix, iy, x, c);
-		call((unsigned int) &cellOpArray[0]);
+		setDI(c, ix, iy, c, 10);
+		//printf("blast:%d,%d:%d,%d\n", ix, iy, x, c);
 	}
+   	call((unsigned int) &displayInstructions[0]);
 
 
 }
@@ -604,72 +1098,70 @@ void triggerCurrent(int position)
 	//SynthZP(H, L);
 }
 
-
-void cellTick(unsigned char kp)
+void cellUI(unsigned char kp)
 {
 
-/*
-  // simple example
-  static int pos;   // pos
-  static int level; // level
-  level = 2;
-  rando = 8;
-  genCellCopy (STOY1, rando + 1, 0, pos, 0);
-  genCellCopy (STOY2, rando + 2, 0, pos, level);
-  genCellCopy (STOY3, rando + 3, 0, pos, level);
-  genCellCopy (SAVE1, rando + 4, 0, pos, level);
-*/
+//setDI(cell, sourceX, sourceY, destX, destY)
+// aliases for positions in the displayInstructions
+	//setDI(STOY1, cursor_x, cursor_y, ui_x, 1);
+	//setDI(STOY2, cursor_x, cursor_y, ui_x, 2);
+	//setDI(STOY3, cursor_x, cursor_y, ui_x, 3);
+	//setDI(SAVE1, cursor_x, cursor_y, ui_x, 4);
+	if (input_x %2) {
+		setDI(CURS1, input_x, input_y, cursor_x, cursor_y);
+		setDI(CURS2, input_x, input_y, cursor_x+1, cursor_y+1);
+	} else {
+		setDI(CURS1, input_x+1, input_y, cursor_x, cursor_y+1);
+		setDI(CURS2, input_x, input_y+1, cursor_x+1, cursor_y);
+	}
+	//setDI(ANIM1, cursor_x, cursor_y, ui_x, 7);
+	//setDI(ANIM2, cursor_x, cursor_y, ui_x, 8);
+	//setDI(ANIM3, cursor_x, cursor_y, ui_x, 9);
+	//setDI(ANIM4, cursor_x, input_y, ui_x, 10);
+	//setDI(ANIM5, cursor_x, input_y, ui_x, 11);
+	//setDI(ANIM6, cursor_x, input_y, ui_x, 12);
+	//setDI(MONO1, cursor_x, input_y, ui_x, 13);
+	//setDI(MONO2, cursor_x, input_y, ui_x, 14);
+	//setDI(COLR1, cursor_x, input_y, ui_x, 15);
+	//setDI(COLR2, cursor_x, input_y, ui_x, 16);
+	//setDI(UIRI1, cursor_x, input_y, ui_x, 17);
+	//setDI(UIRI2, cursor_x, input_y, ui_x, 18);
+	//setDI(UIRI3, cursor_x, input_y, ui_x, 19);
+
+	call((unsigned int) &displayInstructions[0]);
+}
+
+
+void cellHack(unsigned char kp)
+{
 
 //  initTable();  // Initialize the table with values
 //  check_rantab(); 
 
+//	printf("c:%d,%d,i:%d,%d p:%d,%d r:%d\r", cursor_x, cursor_y, input_x, input_y, anim_x, anim_y, r_val);
+
+if(0){
+	// the random stuff
 	anim_x += g_state;
 	anim_y += g_state;
 
-
-	r_val = qrandomJ(peek(0x276)) % 22;
-
+ 	r_val = qrandomJ(peek(0x276)) % COL_SIZE;
 	if (r_val < 12) {
 		anim_y -= g_state;
 	};
+ 
+	setDI(STOY1, 1, r_val, anim_x, anim_y + (r_val / 4));
+	setDI(STOY2, 2, r_val, anim_x, anim_y + 4);
+	setDI(STOY3, 3, r_val, anim_x, anim_y + (r_val / 4));
+	setDI(SAVE1, cursor_x, cursor_y, MAX_CB_X, MAX_CB_Y);
+}
 
-	printf("c:%d,%d,i:%d,%d p:%d,%d r:%d\r", cursor_x, cursor_y, input_x, input_y, anim_x, anim_y, r_val);
+	setDI(ANIM1, input_x, input_y, cursor_x, cursor_y);
 
-    // the random stuff
-	genCellCopy(STOY1, 1, r_val, anim_x, anim_y + (r_val / 4));
-	genCellCopy(STOY2, 2, r_val, anim_x, anim_y + 4);
-	genCellCopy(STOY3, 3, r_val, anim_x, anim_y + (r_val / 4));
-	genCellCopy(SAVE1, cursor_x, cursor_y, MAX_CB_X, MAX_CB_Y);
-	
-	// the input cursor goes to the output destination
+	setDI(CURS2, cursor_x, cursor_x, 1, 1);
+	setDI(CURS1, input_x, input_y, 2, 1);
 
-	genCellCopy(CURS1, input_x, input_y, cursor_x, cursor_y);
-	//genCellCopy(ANIM1, input_x, input_y, 8, 9);
-	//genCellCopy(ANIM2, input_x, input_y, 8, 10);
-	//genCellCopy(ANIM3, input_x, input_y, 8, 11);
-	//genCellCopy(ANIM4, 8, 9, 7, 9);
-	//genCellCopy(ANIM5, 8, 10, 7, 10);
-	//genCellCopy(ANIM6, 8, 11, 7, 11);
-
-	//genCellCopy(CURS1, cursor_x, cursor_x, 8, 12);
- 	//genCellCopy(CURS1, 1, 1, MAX_CB_X - 1, MAX_CB_Y -1);
- 	genCellCopy(CURS2, 1, 1, MAX_CB_X - 1, MAX_CB_Y -1);
-	genCellCopy(ANIM1, 1, 1, MAX_CB_X - 1, MAX_CB_Y -1);
-	genCellCopy(ANIM2, 1, 1, MAX_CB_X - 1, MAX_CB_Y -1);
-	genCellCopy(ANIM3, 1, 1, MAX_CB_X - 1, MAX_CB_Y -1);
-	genCellCopy(ANIM4, 1, 1, MAX_CB_X - 1, MAX_CB_Y -1);
-	genCellCopy(ANIM5, 1, 1, MAX_CB_X - 1, MAX_CB_Y -1);
-	genCellCopy(ANIM6, 1, 1, MAX_CB_X - 1, MAX_CB_Y -1);
-
-	genCellCopy(MONO1, 1, 1, MAX_CB_X - 1, MAX_CB_Y - 1);
-	genCellCopy(MONO2, 2, 2, MAX_CB_X - 4, MAX_CB_Y - 4);
-
-	//genCellCopy(COLR1, 1, 1, MAX_CB_X - 1, MAX_CB_Y -1);
-	//genCellCopy(COLR2, 1, 1, MAX_CB_X - 1, MAX_CB_Y -1);
-	genCellCopy(COLR1, cursor_x, cursor_x, MAX_CB_X / 2, MAX_CB_Y / 2);
-	genCellCopy(COLR2, input_x, input_y, MAX_CB_X / 3, MAX_CB_Y / 3);
-
-	call((unsigned int) &cellOpArray[0]);
+	call((unsigned int) &displayInstructions[0]);
 
 }
 
@@ -681,11 +1173,12 @@ void cellDemo(unsigned char ik)
 	int iter;
 
 	for (iter = 0; iter < 99; iter++) {
-		cellTick(kp);
+		cellHack(kp);
 		if (iter % 8) {
 			kp = 'A';
 		}
 	}
+
 }
 
 
@@ -795,18 +1288,20 @@ void main()
 
 	while ((kp = key()) != APP_QUIT) {
 
- 		if (kp == APP_RESET) {
+		if (kp == APP_RESET) {
 			printf("reset!\n");
 			position = (unsigned int) &BootSound;
 			//position=POS_KEYCLICK1;
-			cursor_x = 2; cursor_y = 2;
-			input_x = 1; input_y = 1;
+			cursor_x = 2;
+			cursor_y = 2;
+			input_x = 1;
+			input_y = 1;
 			anim_y = 12;
 			anim_x = 12;
 			g_state = CGENSTATE_FORWARD;
-		} 
+		}
 
-		if (e_mode) {
+		if (e_mode > 0) {
 
 			if (kp == APP_CAPTURE) {
 				// capture the current cell
@@ -887,7 +1382,11 @@ void main()
 				triggerCurrent(cell_source_base);
 			}
 
-			cellTick(kp);
+    		ui_x++;ui_y++; if(ui_x<ROW_SIZE) ui_x=0; if(ui_y<COL_SIZE) ui_y=0;
+
+			// tick
+			cellHack(kp);
+			cellUI(kp);
 
 			continue;
 		}
@@ -919,7 +1418,7 @@ void main()
 			printHelp();
 		} else if (kp == APP_HIRES) {
 
-			// cellTick
+			// cellHack
 			e_mode = 1;
 
 			hires();
