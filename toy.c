@@ -31,6 +31,12 @@ void Synth();
 
 extern unsigned char OverlayLabel[];
 
+/* Notes:
+$272,$273    Keyboard timer.
+$274,$275    Cursor timer.
+$276,$277    Spare counter — also used by WAIT (and printer in V1.0).
+*/
+
 #define CGENSTATE_INIT_ 0x11
 
 enum {
@@ -134,6 +140,9 @@ enum {
 // The animated x/y cell
 static int anim_x;				// xpos
 static int anim_y;				// anim_yos
+
+static int stoy_x;				// set toy x
+static int stoy_y;				//
 
 int r_val;						// some randomite
 
@@ -1098,15 +1107,10 @@ void triggerCurrent(int position)
 	//SynthZP(H, L);
 }
 
+
 void cellUI(unsigned char kp)
 {
 
-//setDI(cell, sourceX, sourceY, destX, destY)
-// aliases for positions in the displayInstructions
-	//setDI(STOY1, cursor_x, cursor_y, ui_x, 1);
-	//setDI(STOY2, cursor_x, cursor_y, ui_x, 2);
-	//setDI(STOY3, cursor_x, cursor_y, ui_x, 3);
-	//setDI(SAVE1, cursor_x, cursor_y, ui_x, 4);
 	if (input_x %2) {
 		setDI(CURS1, input_x, input_y, cursor_x, cursor_y);
 		setDI(CURS2, input_x, input_y, cursor_x+1, cursor_y+1);
@@ -1114,23 +1118,30 @@ void cellUI(unsigned char kp)
 		setDI(CURS1, input_x+1, input_y, cursor_x, cursor_y+1);
 		setDI(CURS2, input_x, input_y+1, cursor_x+1, cursor_y);
 	}
-	//setDI(ANIM1, cursor_x, cursor_y, ui_x, 7);
-	//setDI(ANIM2, cursor_x, cursor_y, ui_x, 8);
-	//setDI(ANIM3, cursor_x, cursor_y, ui_x, 9);
-	//setDI(ANIM4, cursor_x, input_y, ui_x, 10);
-	//setDI(ANIM5, cursor_x, input_y, ui_x, 11);
-	//setDI(ANIM6, cursor_x, input_y, ui_x, 12);
-	//setDI(MONO1, cursor_x, input_y, ui_x, 13);
-	//setDI(MONO2, cursor_x, input_y, ui_x, 14);
-	//setDI(COLR1, cursor_x, input_y, ui_x, 15);
-	//setDI(COLR2, cursor_x, input_y, ui_x, 16);
-	//setDI(UIRI1, cursor_x, input_y, ui_x, 17);
-	//setDI(UIRI2, cursor_x, input_y, ui_x, 18);
-	//setDI(UIRI3, cursor_x, input_y, ui_x, 19);
 
 	call((unsigned int) &displayInstructions[0]);
 }
+ 
+void cellAnim(unsigned char kp)
+{
 
+	setDI(ANIM1, cursor_x, cursor_y, ui_x, 7);
+	setDI(ANIM2, cursor_x, cursor_y, ui_x, 8);
+	setDI(ANIM3, cursor_x, cursor_y, ui_x, 9);
+	setDI(ANIM4, cursor_x, input_y, ui_x, 10);
+	setDI(ANIM5, cursor_x, input_y, ui_x, 11);
+	setDI(ANIM6, cursor_x, input_y, ui_x, 12);
+	setDI(MONO1, cursor_x, input_y, ui_x, 13);
+	setDI(MONO2, cursor_x, input_y, ui_x, 14);
+	setDI(COLR1, cursor_x, input_y, ui_x, 15);
+	setDI(COLR2, cursor_x, input_y, ui_x, 16);
+	setDI(UIRI1, cursor_x, input_y, ui_x, 17);
+	setDI(UIRI2, cursor_x, input_y, ui_x, 18);
+	setDI(UIRI3, cursor_x, input_y, ui_x, 19);
+
+	call((unsigned int) &displayInstructions[0]);
+}
+ 
 
 void cellHack(unsigned char kp)
 {
@@ -1142,17 +1153,17 @@ void cellHack(unsigned char kp)
 
 if(0){
 	// the random stuff
-	anim_x += g_state;
-	anim_y += g_state;
+	stoy_x += g_state;
+	stoy_y += g_state;
 
  	r_val = qrandomJ(peek(0x276)) % COL_SIZE;
 	if (r_val < 12) {
 		anim_y -= g_state;
 	};
  
-	setDI(STOY1, 1, r_val, anim_x, anim_y + (r_val / 4));
-	setDI(STOY2, 2, r_val, anim_x, anim_y + 4);
-	setDI(STOY3, 3, r_val, anim_x, anim_y + (r_val / 4));
+	setDI(STOY1, 1, r_val, stoy_x, stoy_y + 1);
+	setDI(STOY2, 2, r_val, stoy_x, stoy_y + 2);
+	setDI(STOY3, 3, r_val, stoy_x, stoy_y + 3);
 	setDI(SAVE1, cursor_x, cursor_y, MAX_CB_X, MAX_CB_Y);
 }
 
@@ -1283,6 +1294,10 @@ void main()
 	shouldPlay = 1;
 	position = POS_INITIAL_POSITION;	// start of ROM
 
+    poke(0x24E, 5);                 // set keyb delay 5 at #24E
+    poke(0x24F, 2);                 // set keyb repeat
+    poke(0x26A, 10);                // disble keyclick and cursor
+
 	printHelp();
 	Synth();
 
@@ -1296,8 +1311,10 @@ void main()
 			cursor_y = 2;
 			input_x = 1;
 			input_y = 1;
-			anim_y = 12;
 			anim_x = 12;
+			anim_y = 12;
+			stoy_x = 12;
+			stoy_y = 12;
 			g_state = CGENSTATE_FORWARD;
 		}
 
@@ -1351,14 +1368,22 @@ void main()
 				anim_y = MAX_CB_Y;
 			};
 
-			if (anim_x > MAX_CB_X) {
+			if (stoy_x > MAX_CB_X) {
 				g_state = CGENSTATE_BACKWARD;
 			};
 
-			if (anim_x < 2) {
+			if (stoy_x < 2) {
 				g_state = CGENSTATE_FORWARD;
 			};
+ 
+			if (stoy_y > MAX_CB_Y) {
+				stoy_y = 2;
+			};
 
+			if (stoy_y < 2) {
+				stoy_y = MAX_CB_Y;
+			};
+ 
 			if (cursor_y > MAX_CB_Y) {
 				cursor_y = 2;
 			};
@@ -1387,6 +1412,7 @@ void main()
 			// tick
 			cellHack(kp);
 			cellUI(kp);
+			cellAnim(kp);
 
 			continue;
 		}
@@ -1422,6 +1448,7 @@ void main()
 			e_mode = 1;
 
 			hires();
+		    poke(0x26A, 10);                // disble keyclick and cursor
 
 			// memcpy((unsigned char*)0xa000, OverlayLabel, 8000);
 
@@ -1430,6 +1457,8 @@ void main()
 			// randcogtab();
 
 			gen_rnd_colors();
+
+			hiblob();
 
 			printf("pos: mode:%x\n", position, e_mode);
 			loadTable(position);
