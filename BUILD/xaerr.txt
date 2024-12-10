@@ -3,7 +3,7 @@ Cross-Assembler 65xx V2.2.5 (11:12:15 / Sep  7 2019)
 65816 opcodes and modes coded by Jolse Maginnis
 Oric C adaptation and debugging by Mickael Pointier
 Clean Linux port by Jean-Yves Lamoureux
-Z:\Users\j\Documents\Development\retro\oric\development\soundToy\hiblob.s(30):  5f50:Label 'y' not defined
-Z:\Users\j\Documents\Development\retro\oric\development\soundToy\hiblob.s(41):  5f69:Overflow error
-Z:\Users\j\Documents\Development\retro\oric\development\soundToy\hiblob.s(46):  5f71:Label 'y' not defined
-Z:\Users\j\Documents\Development\retro\oric\development\soundToy\hiblob.s(57):  5f8a:Overflow error
+Z:\Users\j\Documents\Development\retro\oric\development\soundToy\hiblob.s(30):  5f49:Label 'y' not defined
+Z:\Users\j\Documents\Development\retro\oric\development\soundToy\hiblob.s(42):  5f64:Overflow error
+Z:\Users\j\Documents\Development\retro\oric\development\soundToy\hiblob.s(47):  5f6a:Label 'y' not defined
+Z:\Users\j\Documents\Development\retro\oric\development\soundToy\hiblob.s(58):  5f83:Overflow error
