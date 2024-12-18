@@ -3,10 +3,40 @@
  */
 
  // be sure to update displayInstructions
-#define MAX_CB_CELLS 40
+#define MAX_CB_X 40
+#define MAX_CB_Y 24
 
-// Predefined op code block (LDA, STA sequence for MAX_CB_CELLS rows)
-unsigned char displayInstructions[MAX_CB_CELLS][51] = {
+#define MAX_CB_DISPLAY_INSTRUCTIONS 40
+
+// aliases for positions in the displayInstructions
+#define STOY1 0
+#define STOY2 1
+#define STOY3 2
+#define SAVE1 3
+#define CURS1 4
+#define CURS2 5
+#define ANIM1 6
+#define ANIM2 7
+#define ANIM3 8
+#define ANIM4 9
+#define ANIM5 10
+#define ANIM6 11
+#define MONO1 12
+#define MONO2 13
+#define COLR1 14
+#define COLR2 15
+#define UIRI1 16
+#define UIRI2 17
+#define UIRI3 18
+#define COLR2 19
+#define COLR3 20
+#define COLR4 21
+#define COLR5 22
+#define COLR6 23
+
+
+// Predefined op code block (LDA, STA sequence for MAX_CB_DISPLAY_INSTRUCTIONS rows)
+unsigned char displayInstructions[MAX_CB_DISPLAY_INSTRUCTIONS][51] = {
 	{
 	 0xA2, 0x00,				// LDX #$00 (initialize X register)
 	 0xBD, 0x00, 0x00,			// LDA $0000,X (placeholder for source address)

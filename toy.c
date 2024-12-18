@@ -18,12 +18,19 @@
 
 #include "gencode.h"
 
+// UI X,Y positions of things
+#define UI_Y 8
+#define UI_STOR1 2
+#define UI_STOR2 4
+#define UI_STOR3 6
+
 extern unsigned char currentSound[];
 extern unsigned char BootSound[];
 // from picture.s
 
 void Synth();
 
+#define NULL_FN ((unsigned int)0x0000)
 #define POS_START 		((unsigned int)0x0000)
 #define POS_END   		((unsigned int)0xFFFF)
 #define POS_INITIAL_POSITION ((unsigned int)0xFAA7)
@@ -56,6 +63,7 @@ enum {
 #define PITCH_WORD(x) ((unsigned int)currentSound[x] + ((unsigned int)currentSound[x+1] << 8))
 #define CHAN_PITCH(c) (PITCH_WORD(c))
 
+// user-interface keys:
 #define APP_SOUND_ONOFF		'H'
 #define APP_POS_POSITIVE	'J'
 #define APP_POS_MINUS		'K'
@@ -79,55 +87,13 @@ enum {
 #define APP_BLAST			'B'
 
 
-// cgen
+// generated code, addresses and values are calcuated with setDisplayInstruction
 #define SOURCE_BUFFER_START 0xA000
 #define DESTINATION_BUFFER_START 0xA000 + (320*3)
 
 #define ROW_SIZE 40
 #define COL_SIZE 22
 #define BLOCK_HEIGHT 8
-
-
-#define MAX_CB_X 40
-#define MAX_CB_Y MAX_CB_CELLS
-
-
-// aliases for positions in the displayInstructions
-#define STOY1 0
-#define STOY2 1
-#define STOY3 2
-#define SAVE1 3
-#define CURS1 4
-#define CURS2 5
-#define ANIM1 6
-#define ANIM2 7
-#define ANIM3 8
-#define ANIM4 9
-#define ANIM5 10
-#define ANIM6 11
-#define MONO1 12
-#define MONO2 13
-#define COLR1 14
-#define COLR2 15
-#define UIRI1 16
-#define UIRI2 17
-#define UIRI3 18
-
-/*
-#define MONO5 16
-#define MONO6 17
-#define COLR1 18
-#define COLR2 19
-#define COLR3 20
-#define COLR4 21
-#define COLR5 22
-#define COLR6 23
-*/
-
-#define UI_Y 20
-#define UI_STOR1 2
-#define UI_STOR2 4
-#define UI_STOR3 6
 
 
 // A lookup table to filter out values from random quickly
@@ -140,33 +106,150 @@ enum {
 // The animated x/y cell
 static int anim_x;				// xpos
 static int anim_y;				// anim_yos
-
 static int stoy_x;				// set toy x
 static int stoy_y;				//
-
-int r_val;						// some randomite
-
-static int g_state = CGENSTATE_INIT_;	// state, 0xFF=initialize
-
 
 // The current cursor position
 static int cursor_x;			// cursor x
 static int cursor_y;			// cursor y
-
-// The current 'cell' from which input is derived
 static int input_x;				// input pos x
 static int input_y;				// input pos y
-
 static int ui_x;
 static int ui_y;
-
-// Assembly routine to do the search
-//extern unsigned char FindRandomNumber(unsigned char *table);
 
 // The raw address of source and destinations in the cell copy
 unsigned int cell_source_addr;
 unsigned int cell_dest_addr;
 unsigned int cell_source_base;
+
+int r_val;						// some randomite
+
+static int g_state = CGENSTATE_INIT_;	// state, 0xFF=initialize
+
+// The current 'cell' from which input is derived
+int clamp(int value, int min, int max) {
+    if (value < min) {
+        return min;
+    } else if (value > max) {
+        return max;
+    }
+    return value;
+}
+
+
+// Define a function pointer type for step functions
+typedef void (*cellStepFnT)(void *v);
+
+// Define the cell state structure
+typedef struct cellState {
+    int sx; // Source x-coordinate
+    int sy; // Source y-coordinate
+    int x;  // Current x-coordinate
+    int y;  // Current y-coordinate
+    int state; // General state
+    cellStepFnT stepFunction; // Function pointer for the step function
+} cellStateT, *cellStateTP;
+
+// Forward declarations of step functions
+void stepDancer(void *v);
+void stepDropper(void *v);
+void stepEater(void *v);
+
+// Array to hold multiple cell states
+cellStateT cellStates[] = {
+	{1, 1, 11, 20, 0, stepDancer},
+	{1, 2, 12, 21, 0, stepDropper},
+	{1, 3, 13, 22, 0, stepEater},
+	{1, 4, 14, 23, 0, stepDancer},
+	{1, 4, 15, 24, 0, stepDropper},
+	{1, 4, 16, 25, 0, stepEater}
+};
+
+// Step functions
+void stepDancer(void *v) {
+	// unsigned char rg;
+	// rg = qrandomJ(peek(0x276)) % 255;
+
+	cellStateTP dancer = (cellStateTP)v;
+
+	if (dancer == NULL_FN) {
+		return;
+	}
+
+	switch (dancer->state) {
+	case 0:
+        dancer->state = 1; // Example state transition
+        dancer->sx+=2;
+        dancer->sy+=2;
+        break;
+    case 1:
+        dancer->state = 2; // Example state transition
+        dancer->sx-=2;
+        dancer->sy+=2;
+        break;
+    case 2:
+        dancer->state = 3; // Example state transition
+        dancer->sx-=2;
+        dancer->sy-=2;
+        break;
+    case 3:
+        dancer->state = 0; // Example state transition
+        dancer->sx+=2;
+        dancer->sy-=2;
+        break;
+    default:
+    	dancer->state = 0;
+    	dancer->x++;
+    	break;
+    }
+
+    dancer->y++;
+
+    if (dancer->x > ROW_SIZE) dancer->x=0;
+    if (dancer->y > COL_SIZE) dancer->y=0;
+    if (dancer->sx > ROW_SIZE) dancer->sx=ROW_SIZE/2;
+    if (dancer->sy > COL_SIZE) dancer->sy=COL_SIZE/2;
+
+}
+
+void stepDropper(void *v) {
+	cellStateTP dropper = (cellStateTP)v;
+
+	if (dropper == NULL_FN) {
+		return;
+	}
+
+    dropper->state = (dropper->state + 1) % 2; // Toggle between states
+}
+
+void stepEater(void *v) {
+	cellStateTP eater = (cellStateTP)v;
+
+	if (eater == NULL_FN) {
+		return;
+	}
+
+    eater->state = (eater->state + 1) % 2; // Toggle between states
+}
+
+// Example function to demonstrate usage
+int testStates() {
+	int i;
+	for ( i = 0; i < sizeof(cellStates) / sizeof(cellStateT); ++i) {
+		cellStates[i].stepFunction(&cellStates[i]);
+	}
+	return 0;
+}
+
+void updateStates() { 
+	cellStates[0].sy = 1;
+	cellStates[1].sy = 2;
+	cellStates[2].sy = 3;
+	cellStates[3].sy = 4;
+	cellStates[4].sy = 5;
+	cellStates[5].sy = 6;
+}
+
 
 
 char *charHexStr(unsigned char value)
@@ -217,17 +300,17 @@ loadTable(unsigned int address)
 
 // Set the Display Instruction at Cell
 // X,Y values 40x20
-void setDI(int cell, int sourceX, int sourceY, int destX, int destY)
+int setDisplayInstruction(int cell, int sourceX, int sourceY, int destX, int destY)
 {
 
 	unsigned int buffer_base =
-		SOURCE_BUFFER_START + (sourceY * ROW_SIZE * BLOCK_HEIGHT) +
-		(sourceX * 1);
+	SOURCE_BUFFER_START + (sourceY * ROW_SIZE * BLOCK_HEIGHT) +
+	(sourceX * 1);
 	unsigned int dest_base =
-		DESTINATION_BUFFER_START + (destY * ROW_SIZE * BLOCK_HEIGHT) +
-		(destX * 1);
+	DESTINATION_BUFFER_START + (destY * ROW_SIZE * BLOCK_HEIGHT) +
+	(destX * 1);
 
-	if (cell >= MAX_CB_CELLS) {
+	if (cell >= MAX_CB_DISPLAY_INSTRUCTIONS) {
 	} else {
 		// Modify the source and destination addresses for each row (8 rows)
 		int pos;
@@ -242,7 +325,10 @@ void setDI(int cell, int sourceX, int sourceY, int destX, int destY)
 			displayInstructions[cell][6 + pos * 6] = cell_dest_addr & 0xFF;	// Low byte
 			displayInstructions[cell][7 + pos * 6] = (cell_dest_addr >> 8) & 0xFF;	// High byte
 		}
+
+		return 0;
 	}
+	return 1;
 }
 
 #if 0
@@ -281,11 +367,29 @@ void cellBlast(unsigned int ix, unsigned int iy)
 	c = 0;
 	x = 11;
 
-	for (c = 0; c < MAX_CB_CELLS; c++) {
-		setDI(c, ix, iy, c, 10);
-		//printf("blast:%d,%d:%d,%d\n", ix, iy, x, c);
+	for (c = 0; c < MAX_CB_DISPLAY_INSTRUCTIONS; c++) {
+		setDisplayInstruction(c, ix, c, c, 10);
+		// printf("1blast:%d,%d:%d,%d\n", ix, iy, x, c);
 	}
 	call((unsigned int) &displayInstructions[0]);
+
+	// for (c = 0; c < MAX_CB_DISPLAY_INSTRUCTIONS; c++) {
+	// 	setDisplayInstruction(c, ix, c, c, 12);
+	// 	// printf("2blast:%d,%d:%d,%d\n", ix, iy, x, c);
+	// }
+	// call((unsigned int) &displayInstructions[0]);
+
+ 	// for (c = 0; c < MAX_CB_DISPLAY_INSTRUCTIONS; c++) {
+	// 	setDisplayInstruction(c, ix, c, c, 16);
+	// 	// printf("2blast:%d,%d:%d,%d\n", ix, iy, x, c);
+	// }
+	// call((unsigned int) &displayInstructions[0]);
+ 
+//  	for (c = 0; c < MAX_CB_DISPLAY_INSTRUCTIONS; c++) {
+//		setDisplayInstruction(c, MAX_CB_DISPLAY_INSTRUCTIONS - c, c, c, 13);
+//		//printf("blast:%d,%d:%d,%d\n", ix, iy, x, c);
+//	}
+//	call((unsigned int) &displayInstructions[0]);
 
 
 }
@@ -307,35 +411,29 @@ void triggerCurrent(int position)
 void cellUI(unsigned char kp)
 {
 
-	if (input_x % 2) {
-		setDI(CURS1, input_x, input_y, cursor_x, cursor_y);
-		setDI(CURS2, input_x, input_y, cursor_x + 1, cursor_y + 1);
-	} else {
-		setDI(CURS1, input_x + 1, input_y, cursor_x, cursor_y + 1);
-		setDI(CURS2, input_x, input_y + 1, cursor_x + 1, cursor_y);
-	}
+//	if (input_x % 2) {
+	setDisplayInstruction(CURS1, input_x, input_y, cursor_x, cursor_y);
+	setDisplayInstruction(CURS2, input_x, input_y, cursor_x + 1, cursor_y + 1);
+//	} else {
+	setDisplayInstruction(CURS1, input_x + 1, input_y, cursor_x, cursor_y + 1);
+	setDisplayInstruction(CURS2, input_x, input_y + 1, cursor_x + 1, cursor_y);
+//	}
 
-	call((unsigned int) &displayInstructions[0]);
 }
 
 void cellAnim(unsigned char kp)
 {
+	int av;		// animation vector
+	int ai;		// animation instruction
 
-	setDI(ANIM1, cursor_x, cursor_y, ui_x, 7);
-	setDI(ANIM2, cursor_x, cursor_y, ui_x, 8);
-	setDI(ANIM3, cursor_x, cursor_y, ui_x, 9);
-	setDI(ANIM4, cursor_x, input_y, ui_x, 10);
-	setDI(ANIM5, cursor_x, input_y, ui_x, 11);
-	setDI(ANIM6, cursor_x, input_y, ui_x, 12);
-	setDI(MONO1, cursor_x, input_y, ui_x, 13);
-	setDI(MONO2, cursor_x, input_y, ui_x, 14);
-	setDI(COLR1, cursor_x, input_y, ui_x, 15);
-	setDI(COLR2, cursor_x, input_y, ui_x, 16);
-	setDI(UIRI1, cursor_x, input_y, ui_x, 17);
-	setDI(UIRI2, cursor_x, input_y, ui_x, 18);
-	setDI(UIRI3, cursor_x, input_y, ui_x, 19);
+	updateStates();
 
-	call((unsigned int) &displayInstructions[0]);
+	ai = ANIM1;
+	for (av=0;av<5;av++) {
+        cellStates[av].stepFunction(&cellStates[av]); // Call the step function for each cell
+        setDisplayInstruction(ai++, cellStates[av].sx, cellStates[av].sy, cellStates[av].x, cellStates[av].y);
+    }
+
 }
 
 
@@ -347,29 +445,32 @@ void cellHack(unsigned char kp)
 
 //  printf("c:%d,%d,i:%d,%d p:%d,%d r:%d\r", cursor_x, cursor_y, input_x, input_y, anim_x, anim_y, r_val);
 
-	if (0) {
+	{
 		// the random stuff
 		stoy_x += g_state;
 		stoy_y += g_state;
 
 		r_val = qrandomJ(peek(0x276)) % COL_SIZE;
+
 		if (r_val < 12) {
 			anim_y -= g_state;
 		};
 
-		setDI(STOY1, 1, r_val, stoy_x, stoy_y + 1);
-		setDI(STOY2, 2, r_val, stoy_x, stoy_y + 2);
-		setDI(STOY3, 3, r_val, stoy_x, stoy_y + 3);
-		setDI(SAVE1, cursor_x, cursor_y, MAX_CB_X, MAX_CB_Y);
+		if (stoy_x > ROW_SIZE) stoy_x = 0;
+		if (stoy_y > COL_SIZE) stoy_y = 0;
+
+		setDisplayInstruction(STOY1, 1, r_val, stoy_x, stoy_y + 1);
+		setDisplayInstruction(STOY2, 2, r_val, stoy_x, stoy_y + 2);
+		setDisplayInstruction(STOY3, 3, r_val, stoy_x, stoy_y + 3);
+		setDisplayInstruction(SAVE1, cursor_x, cursor_y, MAX_CB_X, MAX_CB_Y);
 	}
 
-	setDI(ANIM1, input_x, input_y, cursor_x, cursor_y);
+#if 0
+	setDisplayInstruction(ANIM1, input_x, input_y, cursor_x, cursor_y);
 
-	setDI(CURS2, cursor_x, cursor_x, 1, 1);
-	setDI(CURS1, input_x, input_y, 2, 1);
-
-	call((unsigned int) &displayInstructions[0]);
-
+	setDisplayInstruction(CURS2, cursor_x, cursor_x, 1, 1);
+	setDisplayInstruction(CURS1, input_x, input_y, 2, 1);
+#endif 
 }
 
 
@@ -453,7 +554,7 @@ void gen_rnd_colors()
 			rg = qrandomJ(peek(0x276)) % 255;
 		}
 		while (((rg & 0x78) == 0x08 || (rg & 0x78) == 0x18)
-			   || ((rg & 0x78) == 0x88 || (rg & 0x78) == 0x98));
+			|| ((rg & 0x78) == 0x88 || (rg & 0x78) == 0x98));
 
 		// rg = qrandomJ(peek(0x276)) % 255;
 
@@ -466,7 +567,7 @@ void gen_rnd_colors()
 		// Chema's randgen:
 		// rg == randgen();
 
-		poke(j, rg);
+			poke(j, rg);
 		// printf("j: %x rg: %x\n", j, rg);
 
 	}
@@ -485,6 +586,11 @@ void main()
 	int m;
 	int e_mode = 0;				// edit mode
 
+
+	
+	cell_source_base =
+				SOURCE_BUFFER_START +
+				(input_y * ROW_SIZE * BLOCK_HEIGHT) + (input_x * 1);
 	setflags(SCREEN + NOKEYCLICK);
 
 	shouldPlay = 1;
@@ -520,8 +626,8 @@ void main()
 				// capture the current cell
 				printf("Cin: %d,%d", input_x, input_y);
 				cell_source_base =
-					SOURCE_BUFFER_START +
-					(input_y * ROW_SIZE * BLOCK_HEIGHT) + (input_x * 1);
+				SOURCE_BUFFER_START +
+				(input_y * ROW_SIZE * BLOCK_HEIGHT) + (input_x * 1);
 				hexDump((unsigned char *) cell_source_base, 8);
 			}
 
@@ -605,15 +711,17 @@ void main()
 
 			ui_x++;
 			ui_y++;
-			if (ui_x < ROW_SIZE)
+			if (ui_x > ROW_SIZE)
 				ui_x = 0;
-			if (ui_y < COL_SIZE)
+			if (ui_y > COL_SIZE)
 				ui_y = 0;
 
 			// tick
 			cellHack(kp);
 			cellUI(kp);
 			cellAnim(kp);
+			
+			call((unsigned int) &displayInstructions[0]);
 
 			continue;
 		}
@@ -628,7 +736,7 @@ void main()
 			printf("\np:%x", position);
 		} else if (kp == APP_POS_MINUS) {
 			position--;
-			if (position < POS_START) {
+			if (position <= POS_START) {
 				position = POS_END;
 			}
 			printf("\np:%x", position);
@@ -659,7 +767,7 @@ void main()
 
 			gen_rnd_colors();
 
-			printf("pos: mode:%x\n", position, e_mode);
+			// printf("pos: mode:%x\n", position, e_mode);
 			loadTable(position);
 			hexDump((unsigned char *) position, 16);
 
