@@ -7,6 +7,37 @@ which included some nice synthesizer capabilitiies in the form of the 8192 sound
 
 soundtoy gives you a way of experimenting with the synthesizer of your Oric-1/Atmos.
 
+0 ?"SOUNDHAK:"
+1 ?"e.g. POKE#00,#LO:POKE#01,#HI:CALL#B000"
+2 FORI=#B000TO#B009:READA:POKEI,A:NEXT:REM $B000-$B009
+3 DATA #AE,#00,#00,#AC,#01,#00,#20,#86,#FA,#60
+4 REM PING EXPLODE ZAP..
+6 POKE#00,#A7:POKE#01,#FA:CALL#B000:WAIT65
+8 POKE#00,#B0:POKE#01,#FA:CALL#B000:WAIT85
+10 POKE#00,#C0:POKE#01,#FA:CALL#B000:WAIT75
+11 REM ..AND FROM ROM: FAA7,FABD,FAD3,FB10..
+12 POKE#00,#AA:POKE#01,#FA:CALL#B000:WAIT100
+13 POKE#00,#BD:POKE#01,#FA:CALL#B000:WAIT20
+14 POKE#00,#D3:POKE#01,#FA:CALL#B000:WAIT40
+15 POKE#00,#10:POKE#01,#FB:CALL#B000:WAIT80
+16 POKE#00,#BD:POKE#01,#FA:CALL#B000:WAIT10
+17 POKE#00,#75:POKE#01,#FB:CALL#B000:WAIT20
+18 POKE#00,#10:POKE#01,#FB:CALL#B000:WAIT24
+19 CALL#B000
+20 GOTO 12
+
+
+
+            .org $B000          ; Example start address in RAM
+
+SOUNDROUTINE:
+            LDX $00             ; Load low byte of sound data address from zero-page ($00)
+            LDY $01             ; Load high byte of sound data address from zero-page ($01)
+            JSR $FA86           ; Jump to the sound routine in ROM (#FA86)
+            RTS                 ; Return to BASIC
+
+
+
 V0.0.1	- Basic first version - use to explore the Oric ROM data to use as
 		  seeds to the 8192 synthesizer registers.  Use 'j' and 'k' keys to step
 		  through ROM addresses to listen to the various 'presets' available in
