@@ -16,19 +16,19 @@ So, to use this in BASIC it would be nice to just put the address of 14 bytes of
 
 We use some assembly to set up the register address for the call to SPLAY (#FA86)
 
-`
+```
 	            .org $B000          ; Example start address in RAM
 	SOUNDROUTINE:
 	            LDX $00             ; Load low byte of sound data address from zero-page ($00)
 	            LDY $01             ; Load high byte of sound data address from zero-page ($01)
 	            JSR $FA86           ; Jump to the sound routine in ROM (#FA86)
 	            RTS                 ; Return to BASIC
-`
+```
 
 An example, in BASIC, of using the ORIC SPLAY command (#FA86) to play sound effects, which includes the above 'loader' code:
 
 
-`
+```
 	0 ?"SOUNDHAK:"
 	1 ?"e.g. POKE#00,#LO:POKE#01,#HI:CALL#B000"
 	2 FORI=#B000TO#B009:READA:POKEI,A:NEXT:REM $B000-$B009
@@ -47,7 +47,7 @@ An example, in BASIC, of using the ORIC SPLAY command (#FA86) to play sound effe
 	18 POKE#00,#10:POKE#01,#FB:CALL#B000:WAIT24
 	19 CALL#B000
 	20 GOTO 12
-`
+```
 
 
 soundToy can be used to discover the addresses of cool sounds, and these can then be used in BASIC for a wide array of purposes .. sound effects, ui prompts, annoying alert sounds, maybe even some songs could be written ..
