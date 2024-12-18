@@ -53,6 +53,9 @@ An example, in BASIC, of using the ORIC SPLAY command (#FA86) to play sound effe
 soundToy can be used to discover the addresses of cool sounds, and these can then be used in BASIC for a wide array of purposes .. sound effects, ui prompts, annoying alert sounds, maybe even some songs could be written ..
 
 
+Note that soundToy also has a hack/playground for the HIRES mode, where strange things are happening - eventually the sound exploration and HIRES colour synthesis aspects of soundToy will be integrated somehow, to make it an explosion of colour and sound, but for now things aren't quite wired up while the fun details are being played with ..
+
+
 V0.0.1	- Basic first version - use to explore the Oric ROM data to use as
 		  seeds to the 8192 synthesizer registers.  Use 'j' and 'k' keys to step
 		  through ROM addresses to listen to the various 'presets' available in
