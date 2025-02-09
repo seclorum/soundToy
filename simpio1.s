@@ -4,22 +4,20 @@
 ; 1. Memory-Mapped I/O
 ; 2. Character Input and Output
 ; 3. Simple Sound Generation
-; 4. Program Flow Control
+; 4. Program Flow Control with Randomized Sound
 ; *******************************************************************
 
         .org $0500          ; Set program load address in memory
 
 ; *** 1. Memory-Mapped I/O ***
-; The Oric uses specific memory locations for hardware interaction.
-; For example, the keyboard and display are mapped to known addresses.
-
 TEXT_SCREEN  = $BB80  ; Start of text screen memory
 KEYBOARD     = $0300  ; Keyboard input location
 AY_REGISTER  = $0310  ; Sound chip register select
 AY_WRITE     = $0311  ; Sound chip write data
+RANDOM_SEED  = $0240  ; Random number generator seed
 
-; *** 2. Character Input and Output ***
-; Read a keypress and display it on the screen
+; *** 2. Character Input and Output with Sound ***
+; Read a keypress, display it on the screen, and trigger a random sound
 
         LDX #0            ; X register = 0 (column position)
 READ_KEY:
@@ -28,24 +26,24 @@ READ_KEY:
         STA TEXT_SCREEN,X ; Store key at screen position X
         INX              ; Move to next column
         CPX #40          ; Limit to one line (40 columns)
-        BNE READ_KEY      ; Loop for next key
+        BNE TRIGGER_SOUND ; Jump to play sound when a key is pressed
 
-; *** 3. Simple Sound Generation ***
-; Play a simple sound using the AY-3-8912 sound chip
-
-        LDA #7           ; Select register 7 (Mixer control)
-        STA AY_REGISTER  
-        LDA #%11111010   ; Enable tone on channel A
-        STA AY_WRITE     
-        
+; *** 3. Simple Sound Generation with Randomized Frequency ***
+TRIGGER_SOUND:
+        JSR RANDOM        ; Generate a random frequency
         LDA #0           ; Select register 0 (Channel A fine tone)
         STA AY_REGISTER  
-        LDA #$20         ; Set frequency low byte
+        LDA RANDOM_SEED   ; Load random value for frequency
         STA AY_WRITE     
         
         LDA #1           ; Select register 1 (Channel A coarse tone)
         STA AY_REGISTER  
         LDA #0           ; Set frequency high byte
+        STA AY_WRITE     
+        
+        LDA #7           ; Select register 7 (Mixer control)
+        STA AY_REGISTER  
+        LDA #%11111010   ; Enable tone on channel A
         STA AY_WRITE     
         
         LDA #8           ; Select register 8 (Amplitude for channel A)
@@ -59,10 +57,16 @@ READ_KEY:
         STA AY_REGISTER  
         LDA #0           
         STA AY_WRITE     
+        JMP READ_KEY      ; Loop back to wait for another keypress
 
-; *** 4. Program Flow Control ***
-; Implement a simple delay routine
+; *** 4. Random Number Generator ***
+RANDOM:
+        LDA RANDOM_SEED   ; Load the current seed
+        EOR #$1D         ; Apply XOR with a fixed value
+        STA RANDOM_SEED   ; Store new random seed
+        RTS              ; Return with a new random value
 
+; *** 5. Program Flow Control ***
 DELAY:
         LDY #$FF         ; Outer loop
 LOOP1:  LDX #$FF         ; Inner loop
