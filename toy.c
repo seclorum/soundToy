@@ -420,8 +420,7 @@ void cellBlast(unsigned int ix, unsigned int iy)
 	// 	setDisplayInstruction(9, 3, 2, 14, 14);
 	// }
 
-
-	call((unsigned int) &displayInstructions[0]);
+	//call((unsigned int) &displayInstructions[0]);
 
 	// for (c = 0; c < MAX_CB_DISPLAY_INSTRUCTIONS; c++) {
 	// 	setDisplayInstruction(c, ix, c, c, 12);
@@ -624,7 +623,7 @@ void gen_rnd_colors()
 
 }
  
-void check_vals()
+void validateStates()
 {
 			if (kp == APP_CURSOR_L) {
 				cursor_x -= 1;
@@ -775,13 +774,13 @@ void main()
 
 
 			// tick
-			// cellHack(kp);
-			// cellUI(kp);
 			updateStates();
 
+			cellHack(kp);
+			cellUI(kp);
 			cellAnim(kp);
 			
-			check_vals();
+			validateStates();
 
 			call((unsigned int) &displayInstructions[0]);
 
