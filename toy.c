@@ -91,10 +91,16 @@ enum {
 #define SOURCE_BUFFER_START 0xA000
 #define DESTINATION_BUFFER_START 0xA000 + (320*3)
 
-#define ROW_SIZE 40
-#define COL_SIZE 22
+#define ROW_LENGTH 40
+#define COL_LENGTH 22
 #define BLOCK_HEIGHT 8
 
+unsigned char kp;			// key pressed
+
+/*
+HIRES: Current Byte = PEEK(#A000+(Y*40)+(X/6))
+TEXT: Current Byte = PEEK(#BB80+((Y/8)*40)+(X/6))
+*/
 
 // A lookup table to filter out values from random quickly
 // 256 numbers 
@@ -151,19 +157,31 @@ typedef struct cellState {
 } cellStateT, *cellStateTP;
 
 // Forward declarations of step functions
+void stepNull(void *v);
 void stepDancer(void *v);
 void stepDropper(void *v);
 void stepEater(void *v);
 
+enum {
+	D_DIAG_F = 0,
+	D_DIAG_B = 1,
+	D_DIAG_L = 2,
+	D_DIAG_R = 3
+} danceStates;
+
 // Array to hold multiple cell states
 cellStateT cellStates[] = {
-	{1, 1, 11, 20, 0, stepDancer},
-	{1, 2, 12, 21, 0, stepDropper},
-	{1, 3, 13, 22, 0, stepEater},
-	{1, 4, 14, 23, 0, stepDancer},
-	{1, 4, 15, 24, 0, stepDropper},
-	{1, 4, 16, 25, 0, stepEater}
+	{0, 0, (ROW_LENGTH / 2), (COL_LENGTH / 2), D_DIAG_F, stepDancer},
+	{1, 0, (ROW_LENGTH / 2), (COL_LENGTH / 2), D_DIAG_B, stepDancer},
+	{2, 0, (ROW_LENGTH / 2), (COL_LENGTH / 2), D_DIAG_L, stepDancer},
+	{3, 0, (ROW_LENGTH / 2), (COL_LENGTH / 2), D_DIAG_R, stepDancer},
+	{4, 0, (ROW_LENGTH / 2), (COL_LENGTH / 2), 2, stepDancer},
+	{5, 0, (ROW_LENGTH / 2), (COL_LENGTH / 2), 3, stepDancer}
 };
+
+void stepNull(void *v) {
+
+}
 
 // Step functions
 void stepDancer(void *v) {
@@ -177,38 +195,47 @@ void stepDancer(void *v) {
 	}
 
 	switch (dancer->state) {
-	case 0:
-        dancer->state = 1; // Example state transition
-        dancer->sx+=2;
-        dancer->sy+=2;
+	case D_DIAG_F:
+        // dancer->state = 1; // Example state transition
+        dancer->x++;
+        dancer->y++;
         break;
-    case 1:
-        dancer->state = 2; // Example state transition
-        dancer->sx-=2;
-        dancer->sy+=2;
+    case D_DIAG_B:
+        // dancer->state = 2; // Example state transition
+        dancer->x--;
+        dancer->y--;
         break;
-    case 2:
-        dancer->state = 3; // Example state transition
-        dancer->sx-=2;
-        dancer->sy-=2;
+    case D_DIAG_L:
+        // dancer->state = 3; // Example state transition
+        dancer->x--;
+        dancer->y++;
         break;
-    case 3:
-        dancer->state = 0; // Example state transition
-        dancer->sx+=2;
-        dancer->sy-=2;
+    case D_DIAG_R:
+        // dancer->state = 0; // Example state transition
+        dancer->x++;
+        dancer->y--;
         break;
     default:
+    	printf("state?:%d\n", dancer->state);
     	dancer->state = 0;
-    	dancer->x++;
     	break;
     }
 
-    dancer->y++;
+    if (dancer->sx > COL_LENGTH) {dancer->sx = 0;}
+    if (dancer->sy > 3) {dancer->sy = 0;}
 
-    if (dancer->x > ROW_SIZE) dancer->x=0;
-    if (dancer->y > COL_SIZE) dancer->y=0;
-    if (dancer->sx > ROW_SIZE) dancer->sx=ROW_SIZE/2;
-    if (dancer->sy > COL_SIZE) dancer->sy=COL_SIZE/2;
+    // dancer->y++;
+
+    if (dancer->x > 30) {dancer->x=4; dancer->state++;}
+    if (dancer->y > 20) {dancer->y=6; dancer->state--;}
+    if (dancer->x < 4) {dancer->x=30; dancer->state++;}
+    if (dancer->y < 6) {dancer->y=20; dancer->state--;}
+
+    if (dancer->sx > ROW_LENGTH) {dancer->sx=ROW_LENGTH/2; dancer->state=0;}
+    if (dancer->sy > COL_LENGTH) {dancer->sy=COL_LENGTH/2; dancer->state=3;}
+
+    if(dancer->state<0) dancer->state=D_DIAG_R;
+    if(dancer->state>D_DIAG_R) dancer->state=0;
 
 }
 
@@ -304,10 +331,10 @@ int setDisplayInstruction(int cell, int sourceX, int sourceY, int destX, int des
 {
 
 	unsigned int buffer_base =
-	SOURCE_BUFFER_START + (sourceY * ROW_SIZE * BLOCK_HEIGHT) +
+	SOURCE_BUFFER_START + (sourceY * ROW_LENGTH * BLOCK_HEIGHT) +
 	(sourceX * 1);
 	unsigned int dest_base =
-	DESTINATION_BUFFER_START + (destY * ROW_SIZE * BLOCK_HEIGHT) +
+	DESTINATION_BUFFER_START + (destY * ROW_LENGTH * BLOCK_HEIGHT) +
 	(destX * 1);
 
 	if (cell >= MAX_CB_DISPLAY_INSTRUCTIONS) {
@@ -316,12 +343,12 @@ int setDisplayInstruction(int cell, int sourceX, int sourceY, int destX, int des
 		int pos;
 		for (pos = 0; pos < BLOCK_HEIGHT; pos++) {
 			// Source address modification
-			cell_source_addr = buffer_base + (pos * ROW_SIZE);
+			cell_source_addr = buffer_base + (pos * ROW_LENGTH);
 			displayInstructions[cell][3 + pos * 6] = cell_source_addr & 0xFF;	// Low byte
 			displayInstructions[cell][4 + pos * 6] = (cell_source_addr >> 8) & 0xFF;	// High byte
 
 			// Destination address modification
-			cell_dest_addr = dest_base + (pos * ROW_SIZE);
+			cell_dest_addr = dest_base + (pos * ROW_LENGTH);
 			displayInstructions[cell][6 + pos * 6] = cell_dest_addr & 0xFF;	// Low byte
 			displayInstructions[cell][7 + pos * 6] = (cell_dest_addr >> 8) & 0xFF;	// High byte
 		}
@@ -365,12 +392,35 @@ void cellBlast(unsigned int ix, unsigned int iy)
 	int y;
 
 	c = 0;
-	x = 11;
+	x = 0;
 
-	for (c = 0; c < MAX_CB_DISPLAY_INSTRUCTIONS; c++) {
-		setDisplayInstruction(c, ix, c, c, 10);
+	for (c = 0; c < (ROW_LENGTH); c++) {
+		setDisplayInstruction(c, c, 0, c, 4);
 		// printf("1blast:%d,%d:%d,%d\n", ix, iy, x, c);
 	}
+
+	for (c=0; c < COL_LENGTH; c++) {
+		setDisplayInstruction(c, c, 1, 4, c);
+		// printf("1blast:%d,%d:%d,%d\n", ix, iy, x, c);
+	}
+
+    // if (0)
+	// {
+	// 	setDisplayInstruction(0, 0, 0, (ROW_LENGTH / 2), (COL_LENGTH / 2));
+	// 	setDisplayInstruction(1, 1, 0, 10, 10);
+	// 	setDisplayInstruction(2, 2, 0, 12, 10);
+	// 	setDisplayInstruction(3, 3, 0, 14, 10);
+
+	// 	setDisplayInstruction(4, 1, 1, 10, 12);
+	// 	setDisplayInstruction(5, 2, 1, 12, 12);
+	// 	setDisplayInstruction(6, 3, 1, 14, 12);
+
+	// 	setDisplayInstruction(7, 1, 2, 10, 14);
+	// 	setDisplayInstruction(8, 2, 2, 12, 14);
+	// 	setDisplayInstruction(9, 3, 2, 14, 14);
+	// }
+
+
 	call((unsigned int) &displayInstructions[0]);
 
 	// for (c = 0; c < MAX_CB_DISPLAY_INSTRUCTIONS; c++) {
@@ -426,7 +476,6 @@ void cellAnim(unsigned char kp)
 	int av;		// animation vector
 	int ai;		// animation instruction
 
-	updateStates();
 
 	ai = ANIM1;
 	for (av=0;av<5;av++) {
@@ -450,14 +499,14 @@ void cellHack(unsigned char kp)
 		stoy_x += g_state;
 		stoy_y += g_state;
 
-		r_val = qrandomJ(peek(0x276)) % COL_SIZE;
+		r_val = qrandomJ(peek(0x276)) % COL_LENGTH;
 
 		if (r_val < 12) {
 			anim_y -= g_state;
 		};
 
-		if (stoy_x > ROW_SIZE) stoy_x = 0;
-		if (stoy_y > COL_SIZE) stoy_y = 0;
+		if (stoy_x > ROW_LENGTH) stoy_x = 0;
+		if (stoy_y > COL_LENGTH) stoy_y = 0;
 
 		setDisplayInstruction(STOY1, 1, r_val, stoy_x, stoy_y + 1);
 		setDisplayInstruction(STOY2, 2, r_val, stoy_x, stoy_y + 2);
@@ -574,10 +623,103 @@ void gen_rnd_colors()
 	while (j++ < k);
 
 }
+ 
+void check_vals()
+{
+			if (kp == APP_CURSOR_L) {
+				cursor_x -= 1;
+			}
+			else
+			if (kp == APP_CURSOR_R) {
+				cursor_x += 1;
+			}
+			else
+			if (kp == APP_CURSOR_U) {
+				cursor_y -= 1;
+			}
+            else
+			if (kp == APP_CURSOR_D) {
+				cursor_y += 1;
+			};
+
+			if (kp == APP_INPUT_L) {
+				input_x -= 1;
+			}
+            else
+			if (kp == APP_INPUT_R) {
+				input_x += 1;
+			}
+            else
+			if (kp == APP_INPUT_U) {
+				input_y -= 1;
+			}
+			else
+			if (kp == APP_INPUT_D) {
+				input_y += 1;
+			}
+			else
+ 			if (kp == APP_BLAST) {
+				cellBlast(input_x, input_y);
+			}
+            else
+			if (kp == APP_SPACE) {
+				triggerCurrent(cell_source_base);
+			};
+
+			if (anim_y > MAX_CB_Y) {
+				anim_y = 2;
+			}
+            else
+			if (anim_y < 2) {
+				anim_y = MAX_CB_Y;
+			};
+
+			if (stoy_x > MAX_CB_X) {
+				g_state = CGENSTATE_BACKWARD;
+			}
+            else
+			if (stoy_x < 2) {
+				g_state = CGENSTATE_FORWARD;
+			};
+
+			if (stoy_y > MAX_CB_Y) {
+				stoy_y = 2;
+			}
+            else
+			if (stoy_y < 2) {
+				stoy_y = MAX_CB_Y;
+			};
+
+			if (cursor_y > MAX_CB_Y) {
+				cursor_y = 2;
+			}
+            else
+			if (cursor_y < 2) {
+				cursor_y = MAX_CB_Y;
+			};
+            
+			if (cursor_x > MAX_CB_X) {
+				cursor_x = MAX_CB_X;
+			}
+			else
+			if (cursor_x < 2) {
+				g_state = CGENSTATE_FORWARD;
+			};
+
+			ui_x++;
+			ui_y++;
+			if (ui_x > ROW_LENGTH) {
+				ui_x = 0;
+			}
+			else
+			if (ui_y > COL_LENGTH) {
+				ui_y = 0;
+			};
+}
+
 
 void main()
 {
-	unsigned char kp;			// key pressed
 	unsigned int position;		// position
 	unsigned int i;				// input
 	unsigned char r;
@@ -590,7 +732,7 @@ void main()
 	
 	cell_source_base =
 				SOURCE_BUFFER_START +
-				(input_y * ROW_SIZE * BLOCK_HEIGHT) + (input_x * 1);
+				(input_y * ROW_LENGTH * BLOCK_HEIGHT) + (input_x * 1);
 	setflags(SCREEN + NOKEYCLICK);
 
 	shouldPlay = 1;
@@ -627,100 +769,20 @@ void main()
 				printf("Cin: %d,%d", input_x, input_y);
 				cell_source_base =
 				SOURCE_BUFFER_START +
-				(input_y * ROW_SIZE * BLOCK_HEIGHT) + (input_x * 1);
+				(input_y * ROW_LENGTH * BLOCK_HEIGHT) + (input_x * 1);
 				hexDump((unsigned char *) cell_source_base, 8);
 			}
 
-			if (kp == APP_CURSOR_L) {
-				cursor_x -= 1;
-			};
-
-			if (kp == APP_CURSOR_R) {
-				cursor_x += 1;
-			};
-
-			if (kp == APP_CURSOR_U) {
-				cursor_y -= 1;
-			};
-
-			if (kp == APP_CURSOR_D) {
-				cursor_y += 1;
-			};
-
-			if (kp == APP_INPUT_L) {
-				input_x -= 1;
-			};
-
-			if (kp == APP_INPUT_R) {
-				input_x += 1;
-			};
-
-			if (kp == APP_INPUT_U) {
-				input_y -= 1;
-			};
-			if (kp == APP_INPUT_D) {
-				input_y += 1;
-			};
-
-			if (anim_y > MAX_CB_Y) {
-				anim_y = 2;
-			};
-
-			if (anim_y < 2) {
-				anim_y = MAX_CB_Y;
-			};
-
-			if (stoy_x > MAX_CB_X) {
-				g_state = CGENSTATE_BACKWARD;
-			};
-
-			if (stoy_x < 2) {
-				g_state = CGENSTATE_FORWARD;
-			};
-
-			if (stoy_y > MAX_CB_Y) {
-				stoy_y = 2;
-			};
-
-			if (stoy_y < 2) {
-				stoy_y = MAX_CB_Y;
-			};
-
-			if (cursor_y > MAX_CB_Y) {
-				cursor_y = 2;
-			};
-
-			if (cursor_y < 2) {
-				cursor_y = MAX_CB_Y;
-			};
-
-			if (cursor_x > MAX_CB_X) {
-				cursor_x = MAX_CB_X;
-			};
-			if (cursor_x < 2) {
-				g_state = CGENSTATE_FORWARD;
-			};
-
-			if (kp == APP_BLAST) {
-				cellBlast(input_x, input_y);
-			};
-
-			if (kp == APP_SPACE) {
-				triggerCurrent(cell_source_base);
-			}
-
-			ui_x++;
-			ui_y++;
-			if (ui_x > ROW_SIZE)
-				ui_x = 0;
-			if (ui_y > COL_SIZE)
-				ui_y = 0;
 
 			// tick
-			cellHack(kp);
-			cellUI(kp);
+			// cellHack(kp);
+			// cellUI(kp);
+			updateStates();
+
 			cellAnim(kp);
 			
+			check_vals();
+
 			call((unsigned int) &displayInstructions[0]);
 
 			continue;
@@ -753,7 +815,6 @@ void main()
 			printHelp();
 		} else if (kp == APP_HIRES) {
 
-			// cellHack
 			e_mode = 1;
 
 			hires();

@@ -153,3 +153,26 @@ return_randgenJ:
    rts			; see you later alligator. 
 .)
 
+
+;_HIGH .byte #2b
+;_LOW .byte #42        ; 8-bit value (1 byte)
+;_VALUE .byte #30
+;
+;
+;_cmpRange
+;.(  
+;    ldx #VALUE      ; Load the value into X register
+;    cpx #LOW       ; Compare X with lower bound
+;    bcc set_zero   ; Branch if X < LOW (out of range low)
+;    cpx #HIGH+1    ; Compare X with (HIGH+1)
+;    bcs set_zero   ; Branch if X > HIGH (out of range high)
+;    jmp done       ; Value is in range, keep it
+;
+;set_zero:
+;    ldx #0         ; Set X to 0
+;
+;done:
+;    stx #VALUE      ; Store result back into memory
+;	rts
+;.)
+

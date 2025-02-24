@@ -7,7 +7,7 @@
 ; 4. Program Flow Control with Randomized Sound
 ; *******************************************************************
 
-        .org $0500          ; Set program load address in memory
+;.org $0500          ; Set program load address in memory
 
 ; *** 1. Memory-Mapped I/O ***
 TEXT_SCREEN  = $BB80  ; Start of text screen memory
