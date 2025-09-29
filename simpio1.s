@@ -78,3 +78,26 @@ LOOP2:  DEX              ; Decrement X
 
         .end
 
+
+
+
+
+; 6502 Assembly code to reboot Oric Atmos from Microdisc to internal ROM
+; Target: Oric Atmos with Microdisc floppy controller
+; Assumes $0314 controls ROM overlay (bit 1 = 0 to disable Microdisc ROM)
+
+;        .org $1000      ; Starting address (arbitrary, adjust as needed for your program)
+
+MICRODISC_CTRL  = $0314 ; Microdisc control register (ROMDIS and other flags)
+RESET_VEC       = $FFFC ; 6502 RESET vector location
+
+reboot:
+        SEI             ; Disable interrupts to prevent interference
+        LDA #$00        ; Load 0 to disable Microdisc ROM overlay
+        STA MICRODISC_CTRL ; Write to control register (e.g., bit 1 = 0 disables ROM)
+        JMP (RESET_VEC) ; Jump to the RESET vector to restart system
+
+        .end            ; End of program
+
+
+
