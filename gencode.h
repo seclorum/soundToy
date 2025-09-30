@@ -25,14 +25,14 @@
 #define MONO2 13
 #define COLR1 14
 #define COLR2 15
-#define UIRI1 16
-#define UIRI2 17
-#define UIRI3 18
-#define COLR2 19
-#define COLR3 20
-#define COLR4 21
-#define COLR5 22
-#define COLR6 23
+#define COLR3 16
+#define COLR4 17
+#define COLR5 18
+#define COLR6 19
+#define COLR7 20
+#define UIRI1 21
+#define UIRI2 22
+#define UIRI3 23
 
 
 // Predefined op code block (LDA, STA sequence for MAX_CB_DISPLAY_INSTRUCTIONS rows)
