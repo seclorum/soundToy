@@ -652,7 +652,7 @@ static void print_help_screen(void) {
  * Handles preset navigation, sound triggering, and hires mode entry.
  */
 static void program_main(void) {
-    unsigned int position = POS_INITIAL;  /* Current preset position */
+    int current_pos = POS_INITIAL;  /* Current preset position */
     int edit_mode = 0;                    /* 0: Preset mode, 1: Hires mode */
 
     /* Initialize Base Addresses and Flags */
@@ -669,7 +669,7 @@ static void program_main(void) {
     while ((kp = key()) != KEY_QUIT) {
         if (kp == KEY_RESET_PRESET) {
             printf("Reset to boot!\n");
-            position = (unsigned int)&BootSound;
+            current_pos = (unsigned int)&BootSound;
             /* Reset positions */
             cursor_x = 2; cursor_y = 2;
             input_x = 1; input_y = 1;
@@ -701,20 +701,20 @@ static void program_main(void) {
         if (kp == KEY_SOUND_TOGGLE) {
             should_play = !should_play;
         } else if (kp == KEY_POS_INCREMENT) {
-            position = (position + 1 > POS_END) ? POS_START : position + 1;
-            printf("\nPos: 0x%x\n", position);
+            current_pos = (current_pos + 1 > POS_END) ? POS_START : current_pos + 1;
+            printf("\nPos: 0x%x\n", current_pos);
         } else if (kp == KEY_POS_DECREMENT) {
-            position = (position - 1 < POS_START) ? POS_END : position - 1;
-            printf("\nPos: 0x%x\n", position);
+            current_pos = (current_pos - 1 < POS_START) ? POS_END : current_pos - 1;
+            printf("\nPos: 0x%x\n", current_pos);
         } else if (kp == KEY_RESET_PING) {
             printf("Ping!\n");
-            position = POS_INITIAL;
+            current_pos = POS_INITIAL;
         } else if (kp == KEY_SET_POSITION) {
             unsigned int val;
             printf("Pos: 0x");
             scanf("%x", &val);
-            position = val;
-            printf("\nSet to 0x%x\n", position);
+            current_pos = val;
+            printf("\nSet to 0x%x\n", current_pos);
         } else if (kp == KEY_HELP) {
             print_help_screen();
         } else if (kp == KEY_HIRES_MODE) {
@@ -722,10 +722,11 @@ static void program_main(void) {
             hires();  /* Enter hires mode */
             poke(0x26A, 10);  /* Re-disable keyclick */
 
+
             gen_random_colors();  /* Fill with random colors */
 
-            load_sound_table(position);
-            hex_dump((unsigned char *)position, 16);
+            load_sound_table(current_pos);
+            hex_dump((unsigned char *)current_pos, 16);
 
             /* Dump channel pitches */
             dump_channel_pitch(CHANNEL_A);
@@ -734,7 +735,7 @@ static void program_main(void) {
         } else if (kp == KEY_MEM_HACK) {
             /* Placeholder for mem hack; extend as needed */
         } else if (kp == KEY_TRIGGER_SPACE) {
-            trigger_current_sound(position);
+            trigger_current_sound(current_pos);
         }
     }
 
