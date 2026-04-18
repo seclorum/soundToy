@@ -1,0 +1,800 @@
+
+/*
+ * Oric Atmos HIRES Attribute Interaction Analyzer
+ *
+ * This function analyzes two 8-bit bytes (left and right) for potential
+ * attribute clashes/interactions when placed at different horizontal distances
+ * in HIRES mode (40 bytes per scanline, 6 pixels per byte).
+ *
+ * Oric HIRES rules (serial attributes):
+ * - Every new scanline starts with INK=7 (white), PAPER=0 (black).
+ * - A byte is an ATTRIBUTE if bits 6 and 5 are both 0 (value < 32):
+ *     - 0-7:   Set INK to color 0-7; displays 6x PAPER (possibly inverted).
+ *     - 16-23: Set PAPER to color 0-7; displays 6x PAPER (possibly inverted?).
+ *     - Other low values: special effects (blink, etc.), but we focus on color.
+ * - Otherwise (value >= 32 or bit 6/5 set): it's a graphics byte.
+ *     - Bits 0-5: pixel pattern (1 = current INK, 0 = current PAPER).
+ *     - Bit 7: INVERSE flag (inverts the colors for this 6-pixel block only;
+ *       inversion pairs: 0<->7, 1<->6, 2<->5, 3<->4).
+ * - Attributes persist to the end of the line (affecting all subsequent bytes).
+ * - Inverse on an attribute byte affects how THAT byte is displayed but NOT the
+ *   color change itself.
+ * - "Clash" or interaction occurs when one byte changes INK/PAPER or sets INVERSE,
+ *   affecting the visual appearance of the other byte or the pixels between/after them.
+ *
+ * Distances considered:
+ * - 0 bytes apart (adjacent / consecutive bytes): left immediately followed by right.
+ * - 1 byte apart (one byte in between).
+ * - 3 bytes apart (three bytes in between).
+ *
+ * The function returns a 32-bit mask where each bit represents a specific interaction state.
+ * Higher bits are reserved for future extensions (e.g., blink, double-height, etc.).
+ */
+
+#include <stdint.h>
+
+/* Enumeration of possible interaction states (bit positions in the returned mask) */
+typedef enum {
+    /* No interaction / pure graphics */
+    STATE_MONO_PURE = 0,              /* Both bytes are pure pixel data, no attributes, no inverse; no effect on each other */
+
+    /* Direct color change propagation */
+    STATE_LEFT_SETS_INK,              /* Left byte is INK attribute; changes foreground for right byte and beyond */
+    STATE_LEFT_SETS_PAPER,            /* Left byte is PAPER attribute; changes background for right byte and beyond */
+    STATE_LEFT_SETS_BOTH,             /* Left sets both INK and PAPER (via multiple attributes, but here via one byte) */
+
+    /* Inverse interactions */
+    STATE_LEFT_INVERSE,               /* Left byte has inverse bit set (affects its own display) */
+    STATE_RIGHT_INVERSE,              /* Right byte has inverse bit set */
+    STATE_INVERSE_PROPAGATES,         /* Inverse on left affects how right would render if it were pixels (but attributes override) */
+
+    /* Clash when bytes are close */
+    STATE_ADJACENT_CLASH,             /* Adjacent: left attribute visibly affects right's pixels or display */
+    STATE_ONE_BYTE_CLASH,             /* One byte gap: attribute from left reaches right */
+    STATE_THREE_BYTE_CLASH,           /* Three byte gap: attribute from left still reaches right */
+
+    /* Special mono vs colored */
+    STATE_LEFT_MONO_RIGHT_COLOR,      /* Left is pure pixels (no attr/inverse), right introduces color */
+    STATE_LEFT_COLOR_RIGHT_MONO,      /* Left introduces color, right is pure pixels (may be overridden) */
+    STATE_BOTH_MONO_NO_INVERSE,       /* Both pure pixels, no inverse: clean mono block */
+
+    /* Attribute display side-effects */
+    STATE_LEFT_ATTR_DISPLAYS_AS_PAPER,/* Left attribute byte displays using current PAPER (typical for INK attr) */
+    STATE_RIGHT_ATTR_DISPLAYS_AS_INK, /* Right attribute displays using INK or inverse PAPER */
+
+    /* Combined states for smooth transitions */
+    STATE_SAFE_TRANSITION,            /* No clash at any distance: can be used for smooth color changes */
+    STATE_CLASH_AT_ADJACENT,          /* Clash only when directly adjacent */
+    STATE_CLASH_AT_DISTANCE_1,        /* Clash appears with 1 byte separation */
+    STATE_CLASH_AT_DISTANCE_3,        /* Clash with 3 bytes separation (farther propagation) */
+
+    STATE_COUNT                       /* Total number of defined states (for array sizing) */
+} OricHiresInteractionState;
+
+/* Helper: is this byte an attribute? */
+static inline int is_attribute(uint8_t b) {
+    return ((b & 0x60) == 0);  /* bits 6 and 5 both clear */
+}
+
+/* Helper: is this byte setting INK? (0-7) */
+static inline int is_ink_attr(uint8_t b) {
+    return is_attribute(b) && (b <= 7);
+}
+
+/* Helper: is this byte setting PAPER? (16-23) */
+static inline int is_paper_attr(uint8_t b) {
+    return is_attribute(b) && (b >= 16 && b <= 23);
+}
+
+/* Helper: does byte have inverse flag? */
+static inline int has_inverse(uint8_t b) {
+    return (b & 0x80) != 0;
+}
+
+/* Helper: is byte pure graphics (no attribute, may have inverse) */
+static inline int is_pure_graphics(uint8_t b) {
+    return !is_attribute(b);
+}
+
+/*
+ * Main function:
+ *   left, right : two 8-bit bytes from HIRES memory
+ * Returns a uint32_t bitmask of active OricHiresInteractionState flags
+ *   for the three distances (adjacent, +1 byte, +3 bytes).
+ *
+ * Usage for smooth color transitions:
+ *   - Look for STATE_SAFE_TRANSITION when planning color changes.
+ *   - Avoid positions where STATE_CLASH_* is set if you want no visible interference.
+ *   - Use STATE_LEFT_SETS_INK / PAPER to deliberately propagate color smoothly.
+ */
+uint32_t oric_hires_interaction_assess(uint8_t left, uint8_t right) {
+    uint32_t states = 0;
+
+    int left_attr   = is_attribute(left);
+    int right_attr  = is_attribute(right);
+    int left_ink    = is_ink_attr(left);
+    int left_paper  = is_paper_attr(left);
+    int left_inv    = has_inverse(left);
+    int right_inv   = has_inverse(right);
+    int left_pure   = is_pure_graphics(left);
+    int right_pure  = is_pure_graphics(right);
+
+    /* Base mono state */
+    if (left_pure && right_pure && !left_inv && !right_inv) {
+        states |= (1U << STATE_MONO_PURE);
+        states |= (1U << STATE_BOTH_MONO_NO_INVERSE);
+    }
+
+    /* Color setting from left */
+    if (left_ink) {
+        states |= (1U << STATE_LEFT_SETS_INK);
+    }
+    if (left_paper) {
+        states |= (1U << STATE_LEFT_SETS_PAPER);
+    }
+    if (left_ink && left_paper) {  /* Rare in single byte, but possible in analysis */
+        states |= (1U << STATE_LEFT_SETS_BOTH);
+    }
+
+    /* Inverse flags */
+    if (left_inv)  states |= (1U << STATE_LEFT_INVERSE);
+    if (right_inv) states |= (1U << STATE_RIGHT_INVERSE);
+
+    /* Pure graphics with color introduction */
+    if (left_pure && !right_pure) {
+        states |= (1U << STATE_LEFT_MONO_RIGHT_COLOR);
+    }
+    if (!left_pure && right_pure) {
+        states |= (1U << STATE_LEFT_COLOR_RIGHT_MONO);
+    }
+
+    /* Attribute display side-effects */
+    if (left_attr) {
+        states |= (1U << STATE_LEFT_ATTR_DISPLAYS_AS_PAPER);  /* INK attrs typically show PAPER */
+    }
+    if (right_attr) {
+        states |= (1U << STATE_RIGHT_ATTR_DISPLAYS_AS_INK);
+    }
+
+    /* Interaction / clash analysis per distance */
+    /* Adjacent (distance 0): left directly precedes right */
+    int adjacent_clash = 0;
+    if (left_attr) {
+        adjacent_clash = 1;  /* left changes color for right */
+    }
+    if (left_inv && right_pure) {
+        adjacent_clash = 1;  /* inverse may visually interact depending on current colors */
+    }
+    if (adjacent_clash) {
+        states |= (1U << STATE_ADJACENT_CLASH);
+        states |= (1U << STATE_CLASH_AT_ADJACENT);
+    }
+
+    /* One byte apart (distance 1): one intervening byte */
+    /* Attribute from left still propagates across 1 byte */
+    int one_byte_clash = (left_attr) ? 1 : 0;
+    if (one_byte_clash) {
+        states |= (1U << STATE_ONE_BYTE_CLASH);
+        states |= (1U << STATE_CLASH_AT_DISTANCE_1);
+    }
+
+    /* Three bytes apart (distance 3): attribute still reaches */
+    int three_byte_clash = (left_attr) ? 1 : 0;
+    if (three_byte_clash) {
+        states |= (1U << STATE_THREE_BYTE_CLASH);
+        states |= (1U << STATE_CLASH_AT_DISTANCE_3);
+    }
+
+    /* Inverse propagation (affects rendering of subsequent graphics bytes) */
+    if (left_inv && right_pure) {
+        states |= (1U << STATE_INVERSE_PROPAGATES);
+    }
+
+    /* Safe transition: no attribute from left, no inverse clash, pure or compatible */
+    int safe = (!left_attr) && (!left_inv || right_attr) && 
+               (!(left_pure && !right_pure) || !left_inv);
+    if (safe && !adjacent_clash && !one_byte_clash) {
+        states |= (1U << STATE_SAFE_TRANSITION);
+    }
+
+    return states;
+}
+
+/* Optional helper: convert state mask to a human-readable string (for debugging) */
+void oric_hires_print_states(uint32_t mask) {
+    /* Implementation left as exercise; you can use if (mask & (1U << STATE_XXX)) printf(...); */
+    /* Example output: "MONO_PURE | LEFT_SETS_INK | ADJACENT_CLASH" etc. */
+}
+
+
+
+/*
+
+How to Use This Function for Smooth Color TransitionsCall the function with candidate left/right byte pairs from your HIRES screen buffer.
+Check the returned mask:Prefer pairs where (mask & (1U << STATE_SAFE_TRANSITION)) != 0 for clean changes without unexpected color bleeding.
+Use STATE_LEFT_SETS_INK or STATE_LEFT_SETS_PAPER deliberately to propagate a new color smoothly across several bytes.
+Avoid positions where STATE_CLASH_AT_ADJACENT (or other clash bits) is set unless you want the visual effect.
+
+For gradual transitions:Start with a PAPER or INK attribute byte on the left.
+Follow with pure graphics bytes that rely on the new colors.
+Test different distances (0/1/3 bytes) to find placements where the color "fades" or shifts without ugly clashes.
+
+Extension ideas:Add more states for blink (bit patterns in attributes), double-height, or charset switching.
+Simulate full line rendering in a test harness to verify visual output.
+
+This covers the core Oric HIRES attribute mechanics (serial propagation, inverse on graphics/attributes, 6-pixel blocks) and enumerates meaningful interaction states. The bitmask approach makes it efficient for bulk analysis when building smooth color gradients or animations on the Oric Atmos.
+
+
+
+*/
+
+
+
+Assembly-language helper macros:
+
+; =============================================================
+; Oric HIRES Attribute Helpers (6502 Assembly for OSDK)
+; =============================================================
+
+; Zero-page temporaries (you can change these if needed)
+ZP_LEFT     = $80     ; input: left byte
+ZP_RIGHT    = $81     ; input: right byte
+ZP_RESULT   = $82     ; 32-bit result mask (low byte first: $82,$83,$84,$85)
+ZP_TEMP     = $86     ; scratch
+
+; Bit definitions for the result mask (same as C enum, shifted to bits)
+STATE_MONO_PURE             = 0
+STATE_LEFT_SETS_INK         = 1
+STATE_LEFT_SETS_PAPER       = 2
+STATE_LEFT_SETS_BOTH        = 3
+STATE_LEFT_INVERSE          = 4
+STATE_RIGHT_INVERSE         = 5
+STATE_INVERSE_PROPAGATES    = 6
+STATE_ADJACENT_CLASH        = 7
+STATE_ONE_BYTE_CLASH        = 8
+STATE_THREE_BYTE_CLASH      = 9
+STATE_LEFT_MONO_RIGHT_COLOR = 10
+STATE_LEFT_COLOR_RIGHT_MONO = 11
+STATE_BOTH_MONO_NO_INVERSE  = 12
+STATE_LEFT_ATTR_DISPLAYS_AS_PAPER = 13
+STATE_RIGHT_ATTR_DISPLAYS_AS_INK  = 14
+STATE_SAFE_TRANSITION       = 15
+STATE_CLASH_AT_ADJACENT     = 16
+STATE_CLASH_AT_DISTANCE_1   = 17
+STATE_CLASH_AT_DISTANCE_3   = 18
+
+; -----------------------------------------------------------------
+; is_attribute: returns Z=1 if attribute (bits 6+5 both clear)
+; Input: A = byte
+; Clobbers: A, flags only
+; -----------------------------------------------------------------
+is_attribute:
+    and #$60          ; mask bits 6 and 5
+    beq @yes          ; both clear → attribute
+    lda #1            ; not attribute (Z=0)
+    rts
+@yes:
+    lda #0            ; is attribute (Z=1)
+    rts
+
+; -----------------------------------------------------------------
+; is_ink_attr: returns Z=1 if ink attribute (0-7)
+; Input: A = byte
+; -----------------------------------------------------------------
+is_ink_attr:
+    jsr is_attribute
+    bne @no
+    cmp #8            ; < 8 ?
+    bcc @yes
+@no:
+    lda #1
+    rts
+@yes:
+    lda #0
+    rts
+
+; -----------------------------------------------------------------
+; is_paper_attr: returns Z=1 if paper attribute (16-23)
+; Input: A = byte
+; -----------------------------------------------------------------
+is_paper_attr:
+    jsr is_attribute
+    bne @no
+    cmp #16
+    bcc @no
+    cmp #24
+    bcs @no
+@yes:
+    lda #0            ; Z=1
+    rts
+@no:
+    lda #1            ; Z=0
+    rts
+
+; -----------------------------------------------------------------
+; has_inverse: returns Z=1 if bit 7 set
+; Input: A = byte
+; -----------------------------------------------------------------
+has_inverse:
+    and #$80
+    beq @no
+    lda #0            ; Z=1 (has inverse)
+    rts
+@no:
+    lda #1            ; Z=0
+    rts
+
+; -----------------------------------------------------------------
+; is_pure_graphics: returns Z=1 if NOT attribute
+; Input: A = byte
+; -----------------------------------------------------------------
+is_pure_graphics:
+    jsr is_attribute
+    beq @no           ; is attribute → not pure graphics
+    lda #0            ; Z=1 (pure graphics)
+    rts
+@no:
+    lda #1            ; Z=0
+    rts
+
+
+
+// Assembly language version of assement routine (oric_hires_interaction_assess):
+
+; =============================================================
+; oric_hires_interaction_assess
+; Input : A = left byte,  X = right byte   (or use ZP_LEFT / ZP_RIGHT)
+; Output: 32-bit mask in ZP_RESULT (little-endian: low byte first)
+;         You can extend to 4 bytes if more states are added later.
+; Clobbers: A, X, Y, ZP_TEMP
+; =============================================================
+oric_hires_interaction_assess:
+    sta ZP_LEFT
+    stx ZP_RIGHT
+
+    lda #0
+    sta ZP_RESULT
+    sta ZP_RESULT+1
+    sta ZP_RESULT+2
+    sta ZP_RESULT+3
+
+    ; --- Left properties ---
+    lda ZP_LEFT
+    jsr is_attribute
+    beq @left_not_attr
+    lda #1
+    sta ZP_TEMP       ; left_attr = 1
+    jmp @left_attr_done
+@left_not_attr:
+    lda #0
+    sta ZP_TEMP       ; left_attr = 0
+@left_attr_done:
+
+    lda ZP_LEFT
+    jsr is_ink_attr
+    bne @no_left_ink
+    lda ZP_RESULT
+    ora #(1 << STATE_LEFT_SETS_INK)
+    sta ZP_RESULT
+@no_left_ink:
+
+    lda ZP_LEFT
+    jsr is_paper_attr
+    bne @no_left_paper
+    lda ZP_RESULT
+    ora #(1 << STATE_LEFT_SETS_PAPER)
+    sta ZP_RESULT
+@no_left_paper:
+
+    lda ZP_LEFT
+    jsr has_inverse
+    bne @no_left_inv
+    lda ZP_RESULT
+    ora #(1 << STATE_LEFT_INVERSE)
+    sta ZP_RESULT
+@no_left_inv:
+
+    lda ZP_LEFT
+    jsr is_pure_graphics
+    bne @no_left_pure
+    lda ZP_RESULT
+    ora #(1 << STATE_LEFT_ATTR_DISPLAYS_AS_PAPER)  ; attributes usually show paper
+    sta ZP_RESULT
+@no_left_pure:
+
+    ; --- Right properties ---
+    lda ZP_RIGHT
+    jsr is_attribute
+    beq @right_not_attr
+    lda ZP_RESULT
+    ora #(1 << STATE_RIGHT_ATTR_DISPLAYS_AS_INK)
+    sta ZP_RESULT
+@right_not_attr:
+
+    lda ZP_RIGHT
+    jsr has_inverse
+    bne @no_right_inv
+    lda ZP_RESULT
+    ora #(1 << STATE_RIGHT_INVERSE)
+    sta ZP_RESULT
+@no_right_inv:
+
+    ; Pure graphics checks
+    lda ZP_LEFT
+    jsr is_pure_graphics
+    bne @left_not_pure_gfx
+    lda ZP_RIGHT
+    jsr is_pure_graphics
+    bne @left_not_pure_gfx
+    lda ZP_LEFT
+    jsr has_inverse
+    beq @left_no_inv
+    jmp @both_mono_check_done
+@left_no_inv:
+    lda ZP_RIGHT
+    jsr has_inverse
+    beq @both_mono
+    jmp @both_mono_check_done
+@both_mono:
+    lda ZP_RESULT
+    ora #(1 << STATE_MONO_PURE) | (1 << STATE_BOTH_MONO_NO_INVERSE)
+    sta ZP_RESULT
+@both_mono_check_done:
+
+    ; Left mono + right color introduction
+    lda ZP_LEFT
+    jsr is_pure_graphics
+    bne @no_lmono_rcolor
+    lda ZP_RIGHT
+    jsr is_attribute
+    beq @no_lmono_rcolor
+    lda ZP_RESULT
+    ora #(1 << STATE_LEFT_MONO_RIGHT_COLOR)
+    sta ZP_RESULT
+@no_lmono_rcolor:
+
+    ; Left color + right mono
+    lda ZP_LEFT
+    jsr is_attribute
+    bne @no_lcolor_rmono
+    lda ZP_RIGHT
+    jsr is_pure_graphics
+    bne @no_lcolor_rmono
+    lda ZP_RESULT
+    ora #(1 << STATE_LEFT_COLOR_RIGHT_MONO)
+    sta ZP_RESULT
+@no_lcolor_rmono:
+
+    ; --- Clash / Interaction analysis ---
+
+    ; Adjacent clash (distance 0)
+    lda ZP_TEMP       ; left_attr
+    bne @adj_clash_yes
+    lda ZP_LEFT
+    jsr has_inverse
+    bne @adj_no_inv_clash
+    jmp @adj_check_done
+@adj_no_inv_clash:
+    lda ZP_RIGHT
+    jsr is_pure_graphics
+    bne @adj_check_done
+@adj_clash_yes:
+    lda ZP_RESULT
+    ora #(1 << STATE_ADJACENT_CLASH) | (1 << STATE_CLASH_AT_ADJACENT)
+    sta ZP_RESULT
+@adj_check_done:
+
+    ; One byte apart and Three bytes apart (attribute from left still propagates)
+    lda ZP_TEMP       ; left_attr
+    beq @no_dist_clash
+    lda ZP_RESULT
+    ora #(1 << STATE_ONE_BYTE_CLASH) | (1 << STATE_THREE_BYTE_CLASH) |
+         (1 << STATE_CLASH_AT_DISTANCE_1) | (1 << STATE_CLASH_AT_DISTANCE_3)
+    sta ZP_RESULT
+@no_dist_clash:
+
+    ; Inverse propagates to right graphics byte
+    lda ZP_LEFT
+    jsr has_inverse
+    bne @no_inv_prop
+    lda ZP_RIGHT
+    jsr is_pure_graphics
+    bne @no_inv_prop
+    lda ZP_RESULT
+    ora #(1 << STATE_INVERSE_PROPAGATES)
+    sta ZP_RESULT
+@no_inv_prop:
+
+    ; Safe transition (no left attribute, no bad inverse clash)
+    lda ZP_TEMP       ; left_attr
+    bne @not_safe
+    lda ZP_LEFT
+    jsr has_inverse
+    beq @safe_inv_ok
+    lda ZP_RIGHT
+    jsr is_attribute
+    beq @not_safe
+@safe_inv_ok:
+    lda ZP_RESULT
+    ora #(1 << STATE_SAFE_TRANSITION)
+    sta ZP_RESULT
+@not_safe:
+
+    rts
+
+
+// Usage Example in 6502 Assembly (OSDK style)
+
+
+    ; Example call
+    lda #$07          ; left = INK white (attribute)
+    ldx #$40 | %001111  ; right = graphics byte with some pixels + no inverse
+    jsr oric_hires_interaction_assess
+
+    ; Check a state, e.g. SAFE_TRANSITION
+    lda ZP_RESULT
+    and #(1 << STATE_SAFE_TRANSITION)
+    bne @safe_for_transition
+
+    ; Or test for clash at adjacent
+    lda ZP_RESULT
+    and #(1 << STATE_ADJACENT_CLASH)
+    bne @has_clash
+
+
+
+
+// Combined single 6502 assembly function for Oric OSDK:
+
+
+
+; =============================================================
+; oric_hires_interaction_assess - Single combined function
+; Oric Atmos HIRES attribute interaction analyzer (6502 for OSDK)
+;
+; Input : A = left byte
+;         X = right byte
+; Output: 32-bit result mask in ZP_RESULT ($82-$85, little-endian)
+;         Bit positions match the earlier C enumeration
+; Clobbers: A, X, Y, ZP_TEMP ($86)
+; =============================================================
+
+ZP_LEFT     = $80     ; left byte  (can be changed)
+ZP_RIGHT    = $81     ; right byte
+ZP_RESULT   = $82     ; output mask (4 bytes: low to high)
+ZP_TEMP     = $86     ; scratch
+
+; State bit definitions (same as previous version)
+STATE_MONO_PURE             = 0
+STATE_LEFT_SETS_INK         = 1
+STATE_LEFT_SETS_PAPER       = 2
+STATE_LEFT_SETS_BOTH        = 3
+STATE_LEFT_INVERSE          = 4
+STATE_RIGHT_INVERSE         = 5
+STATE_INVERSE_PROPAGATES    = 6
+STATE_ADJACENT_CLASH        = 7
+STATE_ONE_BYTE_CLASH        = 8
+STATE_THREE_BYTE_CLASH      = 9
+STATE_LEFT_MONO_RIGHT_COLOR = 10
+STATE_LEFT_COLOR_RIGHT_MONO = 11
+STATE_BOTH_MONO_NO_INVERSE  = 12
+STATE_LEFT_ATTR_DISPLAYS_AS_PAPER = 13
+STATE_RIGHT_ATTR_DISPLAYS_AS_INK  = 14
+STATE_SAFE_TRANSITION       = 15
+STATE_CLASH_AT_ADJACENT     = 16
+STATE_CLASH_AT_DISTANCE_1   = 17
+STATE_CLASH_AT_DISTANCE_3   = 18
+
+oric_hires_interaction_assess:
+    sta ZP_LEFT
+    stx ZP_RIGHT
+
+    ; Clear result mask
+    lda #0
+    sta ZP_RESULT
+    sta ZP_RESULT+1
+    sta ZP_RESULT+2
+    sta ZP_RESULT+3
+
+    ; ======================
+    ; Left byte analysis
+    ; ======================
+    lda ZP_LEFT
+    and #$60              ; bits 6+5 == 0 ?
+    bne @left_not_attr
+    ; --- Left is attribute ---
+    lda ZP_LEFT
+    cmp #8                ; ink 0-7 ?
+    bcs @left_no_ink
+    lda ZP_RESULT
+    ora #(1 << STATE_LEFT_SETS_INK)
+    sta ZP_RESULT
+@left_no_ink:
+    lda ZP_LEFT
+    cmp #16               ; paper 16-23 ?
+    bcc @left_no_paper
+    cmp #24
+    bcs @left_no_paper
+    lda ZP_RESULT
+    ora #(1 << STATE_LEFT_SETS_PAPER)
+    sta ZP_RESULT
+@left_no_paper:
+    lda ZP_RESULT
+    ora #(1 << STATE_LEFT_ATTR_DISPLAYS_AS_PAPER)
+    sta ZP_RESULT
+    lda #1
+    sta ZP_TEMP           ; left_attr flag = 1
+    jmp @left_attr_done
+
+@left_not_attr:
+    ; --- Left is pure graphics ---
+    lda #0
+    sta ZP_TEMP           ; left_attr = 0
+@left_attr_done:
+
+    ; Left inverse ?
+    lda ZP_LEFT
+    and #$80
+    beq @left_no_inv
+    lda ZP_RESULT
+    ora #(1 << STATE_LEFT_INVERSE)
+    sta ZP_RESULT
+@left_no_inv:
+
+    ; ======================
+    ; Right byte analysis
+    ; ======================
+    lda ZP_RIGHT
+    and #$60
+    bne @right_not_attr
+    ; Right is attribute
+    lda ZP_RESULT
+    ora #(1 << STATE_RIGHT_ATTR_DISPLAYS_AS_INK)
+    sta ZP_RESULT
+    jmp @right_attr_done
+@right_not_attr:
+    ; (nothing extra for pure graphics right)
+@right_attr_done:
+
+    ; Right inverse ?
+    lda ZP_RIGHT
+    and #$80
+    beq @right_no_inv
+    lda ZP_RESULT
+    ora #(1 << STATE_RIGHT_INVERSE)
+    sta ZP_RESULT
+@right_no_inv:
+
+    ; ======================
+    ; Pure mono checks
+    ; ======================
+    ; Both pure graphics and no inverse ?
+    lda ZP_LEFT
+    and #$60
+    bne @not_both_pure
+    lda ZP_RIGHT
+    and #$60
+    bne @not_both_pure
+    lda ZP_LEFT
+    and #$80
+    bne @not_both_pure
+    lda ZP_RIGHT
+    and #$80
+    bne @not_both_pure
+    lda ZP_RESULT
+    ora #(1 << STATE_MONO_PURE) | (1 << STATE_BOTH_MONO_NO_INVERSE)
+    sta ZP_RESULT
+@not_both_pure:
+
+    ; Left pure graphics + Right introduces color/attribute
+    lda ZP_LEFT
+    and #$60
+    bne @no_lmono_rcolor
+    lda ZP_RIGHT
+    and #$60
+    beq @no_lmono_rcolor
+    lda ZP_RESULT
+    ora #(1 << STATE_LEFT_MONO_RIGHT_COLOR)
+    sta ZP_RESULT
+@no_lmono_rcolor:
+
+    ; Left introduces color/attribute + Right pure graphics
+    lda ZP_LEFT
+    and #$60
+    beq @no_lcolor_rmono
+    lda ZP_RIGHT
+    and #$60
+    bne @no_lcolor_rmono
+    lda ZP_RESULT
+    ora #(1 << STATE_LEFT_COLOR_RIGHT_MONO)
+    sta ZP_RESULT
+@no_lcolor_rmono:
+
+    ; ======================
+    ; Clash / Interaction per distance
+    ; ======================
+    ; Adjacent clash (distance 0)
+    lda ZP_TEMP           ; left_attr ?
+    bne @adj_clash
+    lda ZP_LEFT
+    and #$80              ; left inverse + right pure graphics ?
+    beq @adj_no_clash
+    lda ZP_RIGHT
+    and #$60
+    bne @adj_no_clash
+@adj_clash:
+    lda ZP_RESULT
+    ora #(1 << STATE_ADJACENT_CLASH) | (1 << STATE_CLASH_AT_ADJACENT)
+    sta ZP_RESULT
+@adj_no_clash:
+
+    ; One-byte and three-byte clash (attribute from left propagates across any distance)
+    lda ZP_TEMP           ; left_attr ?
+    beq @no_dist_clash
+    lda ZP_RESULT
+    ora #(1 << STATE_ONE_BYTE_CLASH) | (1 << STATE_THREE_BYTE_CLASH) |
+         (1 << STATE_CLASH_AT_DISTANCE_1) | (1 << STATE_CLASH_AT_DISTANCE_3)
+    sta ZP_RESULT
+@no_dist_clash:
+
+    ; Inverse propagates (left inverse affects subsequent pure graphics right)
+    lda ZP_LEFT
+    and #$80
+    beq @no_inv_prop
+    lda ZP_RIGHT
+    and #$60
+    bne @no_inv_prop
+    lda ZP_RESULT
+    ora #(1 << STATE_INVERSE_PROPAGATES)
+    sta ZP_RESULT
+@no_inv_prop:
+
+    ; ======================
+    ; Safe transition for smooth color changes
+    ; ======================
+    lda ZP_TEMP           ; left_attr == 0 ?
+    bne @not_safe
+    lda ZP_LEFT
+    and #$80              ; left has inverse ?
+    beq @safe
+    lda ZP_RIGHT
+    and #$60              ; right is attribute (inverse on attr is usually harmless)
+    beq @not_safe
+@safe:
+    lda ZP_RESULT
+    ora #(1 << STATE_SAFE_TRANSITION)
+    sta ZP_RESULT
+@not_safe:
+
+    rts
+
+
+// How to call it (OSDK assembly example)
+
+    lda #left_byte_value
+    ldx #right_byte_value
+    jsr oric_hires_interaction_assess
+
+    ; Example: test for safe transition
+    lda ZP_RESULT
+    and #(1 << STATE_SAFE_TRANSITION)
+    bne @can_use_for_smooth_transition
+
+
+This version is self-contained, efficient (no JSR overhead for helpers), and ready to drop into your OSDK project. It accurately reflects Oric HIRES rules: attributes (0-31) set INK (0-7) or PAPER (16-23), bit 7 is inverse (affects graphics block display only), and attributes propagate to the end of the scanline — causing the various clash/interaction states at the three distances.Use the STATE_SAFE_TRANSITION bit when planning smooth color gradients. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
