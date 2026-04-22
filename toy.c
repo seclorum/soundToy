@@ -368,7 +368,7 @@ int setDisplayInstruction(int cell, int sourceX, int sourceY, int destX, int des
 
 #define MAX_SHIFT_CODE_SIZE   2048   // Generous - actual usage ~1.1KB for 56 bits
 #define BLOB_BYTES            7
-#define MAX_SHIFT_BITS        56
+#define MAX_SHIFT_BITS        32
 
 unsigned char shiftCode[MAX_SHIFT_CODE_SIZE];
 
