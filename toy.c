@@ -358,6 +358,144 @@ int setDisplayInstruction(int cell, int sourceX, int sourceY, int destX, int des
 	return 1;
 }
 
+
+#include <lib.h>
+
+// =============================================
+// Self-modifying arbitrary 7-byte bit shifter
+// Targets Oric Atmos HIRES (screen at $A000)
+// =============================================
+
+#define MAX_SHIFT_CODE_SIZE   2048   // Generous - actual usage ~1.1KB for 56 bits
+#define BLOB_BYTES            7
+#define MAX_SHIFT_BITS        56
+
+unsigned char shiftCode[MAX_SHIFT_CODE_SIZE];
+
+// Pre-build the template once at startup
+void initShiftCode(void)
+{
+    unsigned int pos = 0;
+    int bit, b;
+
+    // Initial setup - clear carry
+    shiftCode[pos++] = 0x18;        // CLC
+
+    // Unrolled shift sequence for up to 56 bits
+    // For each bit: 7 × (LDA abs + ROL/ROR + STA abs)
+    for (bit = 0; bit < MAX_SHIFT_BITS; bit++) {
+        for (b = 0; b < BLOB_BYTES; b++) {
+            // LDA $xxxx     (absolute - address will be patched)
+            shiftCode[pos++] = 0xAD;
+            shiftCode[pos++] = 0x00;   // Low byte placeholder
+            shiftCode[pos++] = 0xA0;   // High byte placeholder (default $A000)
+
+            // Rotate opcode placeholder: 0x2A = ROL, 0x6A = ROR
+            shiftCode[pos++] = 0x2A;   // Default to ROL (left)
+
+            // STA $xxxx
+            shiftCode[pos++] = 0x8D;
+            shiftCode[pos++] = 0x00;   // Low byte placeholder
+            shiftCode[pos++] = 0xA0;   // High byte placeholder
+        }
+    }
+
+    // End marker
+    shiftCode[pos++] = 0x60;        // RTS
+
+    // Fill remainder with NOPs
+    while (pos < MAX_SHIFT_CODE_SIZE) {
+        shiftCode[pos++] = 0xEA;
+    }
+}
+
+// Main setup function - call this when shift amount/direction or position changes
+// shift_amount: positive = left shift, negative = right shift
+// base_addr:    starting address of the 7-byte blob (e.g. 0xA000)
+void setBlobShift(signed char shift_amount, unsigned int base_addr)
+{
+    int effective_bits;
+    unsigned char rotate_op;
+    unsigned int pos = 1;   // Skip initial CLC (offset 0)
+    int bit, b;
+    unsigned int addr;
+
+    // Normalize shift amount (mod 56)
+    if (shift_amount < 0) {
+        effective_bits = (-shift_amount) % MAX_SHIFT_BITS;
+        rotate_op = 0x6A;               // ROR (right shift)
+    } else {
+        effective_bits = shift_amount % MAX_SHIFT_BITS;
+        rotate_op = 0x2A;               // ROL (left shift)
+    }
+
+    if (effective_bits == 0) {
+        // Special case: no shift - just RTS (we can patch first instruction to RTS if wanted, but for simplicity we leave CLC + many NOPs)
+        // For zero we could optimize further, but this is fine.
+    }
+
+    // Patch base address into ALL LDA/STA instructions
+    for (bit = 0; bit < MAX_SHIFT_BITS; bit++) {
+        for (b = 0; b < BLOB_BYTES; b++) {
+            addr = base_addr + b;
+
+            // LDA address
+            shiftCode[pos + 1] = addr & 0xFF;           // low
+            shiftCode[pos + 2] = (addr >> 8) & 0xFF;    // high
+
+            // Rotate opcode
+            shiftCode[pos + 3] = (bit < effective_bits) ? rotate_op : 0xEA;  // NOP after desired bits
+
+            // STA address
+            shiftCode[pos + 5] = addr & 0xFF;
+            shiftCode[pos + 6] = (addr >> 8) & 0xFF;
+
+            pos += 7;   // 7 bytes per byte-operation (LDA + rot + STA)
+        }
+    }
+
+    // The rest remains NOPs or the final RTS
+}
+
+// Convenience wrappers
+void shiftBlobLeft(unsigned char bits, unsigned int base_addr)
+{
+    setBlobShift((signed char)bits, base_addr);
+}
+
+void shiftBlobRight(unsigned char bits, unsigned int base_addr)
+{
+    setBlobShift(-(signed char)bits, base_addr);
+}
+
+// Example shifter 
+int do_shifter(void)
+{
+    unsigned int current_base = 0xA000;   // Start at top-left
+
+   {
+
+        // Example operations (arbitrary shifts on any 7-byte region)
+        shiftBlobLeft(4, current_base);           // Left 4
+        call((unsigned int)&shiftCode[0]);        // Execute the patched shifter
+
+        shiftBlobRight(8, current_base);          // Right 8
+        call((unsigned int)&shiftCode[0]);
+
+        // Move to another blob elsewhere on screen
+        current_base = 0xA028;                    // Example: next scanline or different X
+        shiftBlobLeft(3, current_base);
+        call((unsigned int)&shiftCode[0]);
+
+        // ... other UI / data processing ...
+    }
+
+    return 0;
+}
+
+
+
+
 #if 0
 // Initialize the table with some data (e.g., odd numbers)
 void initTable()
@@ -575,10 +713,7 @@ void SynthZP(unsigned char HI, unsigned char LO)
 	call(0xF590);
 }
 
-
-
-
-void gen_rnd_colors()
+void generate_color_particles()
 {
 
 	int j;
@@ -784,6 +919,8 @@ void main()
 
 			call((unsigned int) &displayInstructions[0]);
 
+			do_shifter();
+
 			continue;
 		}
 
@@ -825,7 +962,9 @@ void main()
 			// randcolorgen();
 			// randcogtab();
 
-			gen_rnd_colors();
+     		initShiftCode();                      // Build template once
+
+			generate_color_particles();
 
 			// printf("pos: mode:%x\n", position, e_mode);
 			loadTable(position);
