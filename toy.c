@@ -510,7 +510,8 @@ void cellHack(unsigned char kp)
 		setDisplayInstruction(STOY1, 1, r_val, stoy_x, stoy_y + 1);
 		setDisplayInstruction(STOY2, 2, r_val, stoy_x, stoy_y + 2);
 		setDisplayInstruction(STOY3, 3, r_val, stoy_x, stoy_y + 3);
-		setDisplayInstruction(SAVE1, cursor_x, cursor_y, MAX_CB_X, MAX_CB_Y);
+
+		setDisplayInstruction(SAFE1, cursor_x, cursor_y, MAX_CB_X, MAX_CB_Y);
 	}
 
 #if 0
