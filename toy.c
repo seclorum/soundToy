@@ -1,436 +1,354 @@
 /*
- * soundtoy - Graphics & Sound Exploration Toy for Oric-1 / Atmos
- *            (enhanced animation & step-function playground)
+ * soundtoy - A Sound Exploration Toy for Oric-1 Atmos
  *
- * Version:  1.2.0-exp    (step-function system refactor + new effects)
- * Author:   Original by Jay Vaughan → heavy refactor & extension
- * Target:   OSDK + Oric-1/Atmos (HIRES mode, ROM synth routines)
+ * Version: 1.1.2-fix (2025 – fixed compilation, preserved original behaviour)
+ * Author:  Original by Jay Vaughan – cleaned step-fn system
  *
- * Goals of this version:
- *   • Modernized step-function pattern → more flexible animations
- *   • Multiple animation kinds in one array (dancer, dropper, eater, worm, spark, ...)
- *   • Per-instance timing, age, phase (birth/live/die)
- *   • Cleaner global state → most data lives in CellState
- *   • More visual playground effects while still tiny
- *   • Sound triggering & preset browsing preserved
- *
- * Dependencies: <lib.h>, "gencode.h"  (displayInstructions, MAX_CB_*, Synth(), ...)
+ * This version:
+ *  • Fixes name collision (kp instead of key)
+ *  • Proper forward declaration + consistent struct pointer types
+ *  • Keeps original UI, sound preset logic, blast, cursor, etc. unchanged
+ *  • Introduces cleaner step_fn pattern (still mostly dancers for now)
+ *  • Ready for adding dropper/eater/spark later without big breakage
  */
 
 #include <lib.h>
 #include "gencode.h"
 
-/* ────────────────────────────────────────────────────────────────────────────
-   Constants & Macros
-   ──────────────────────────────────────────────────────────────────────────── */
+#define NULL 0
 
-#define UI_Y_BASE           8
-#define ROW_WIDTH           40
-#define COL_HEIGHT          22
-#define BLOCK_HEIGHT        8
+/* ============================================================================
+ * Constants and Macros      (kept almost identical to original)
+ * ============================================================================ */
 
-#define SOURCE_BUFFER_BASE  0xA000
-#define DEST_BUFFER_BASE    (0xA000 + (320 * 3))
+#define UI_Y_BASE          8
+#define ROW_WIDTH          40
+#define COL_HEIGHT         22
+#define BLOCK_HEIGHT       8
 
-#define KEY_QUIT            'Q'
-#define KEY_HELP            '?'
-#define KEY_HIRES_MODE      'G'
-#define KEY_SOUND_TOGGLE    'H'
-#define KEY_PRESET_NEXT     'J'
-#define KEY_PRESET_PREV     'K'
-#define KEY_PRESET_BOOT     'R'
-#define KEY_PRESET_PING     '.'
-#define KEY_PRESET_SET      'P'
-#define KEY_TRIGGER         ' '
-#define KEY_BLAST           'B'
-#define KEY_CAPTURE         'C'
+#define SOURCE_BUFFER_BASE 0xA000
+#define DEST_BUFFER_BASE   (0xA000 + (320 * 3))
 
-#define KEY_LEFT            'A'
-#define KEY_RIGHT           'D'
-#define KEY_UP              'W'
-#define KEY_DOWN            'S'
+#define POS_INITIAL        0xFAA7
+#define POS_KEYCLICK       0xFB32
 
-#define MAX_ANIM_INSTANCES  12
+#define CGEN_STATE_INIT    0x11
+#define CGEN_STATE_FORWARD 1
+#define CGEN_STATE_BACKWARD -1
 
-/* Animation phase flags */
-#define PHASE_BIRTH         0
-#define PHASE_LIVE          1
-#define PHASE_DYING         2
-#define PHASE_DEAD          3
+/* Keyboard Controls – original */
+#define KEY_SOUND_TOGGLE   'H'
+#define KEY_POS_INCREMENT  'J'
+#define KEY_POS_DECREMENT  'K'
+#define KEY_RESET_PRESET   'R'
+#define KEY_RESET_PING     '.'
+#define KEY_SET_POSITION   'P'
+#define KEY_HELP           '?'
+#define KEY_HIRES_MODE     'G'
+#define KEY_QUIT           'Q'
+#define KEY_CAPTURE_CELL   'C'
+#define KEY_TRIGGER_SPACE  ' '
+#define KEY_CURSOR_LEFT    'A'
+#define KEY_CURSOR_RIGHT   'D'
+#define KEY_CURSOR_UP      'W'
+#define KEY_CURSOR_DOWN    'S'
+#define KEY_BLAST          'B'
 
-/* ────────────────────────────────────────────────────────────────────────────
-   Types
-   ──────────────────────────────────────────────────────────────────────────── */
+/* ============================================================================
+ * Types & forward declarations
+ * ============================================================================ */
 
-typedef struct {
-    signed char dx;         // movement per frame
-    signed char dy;
-    unsigned char max_age;  // 0 = immortal
-    unsigned char color;    // base ink color (used by some effects)
-} AnimParams;
+struct CellState;   // forward declaration – fixes pointer-to-incomplete error
+
+typedef void (*CellStepFn)(struct CellState *);
 
 typedef struct CellState {
-    unsigned char active;       // 0 = slot free
-    unsigned char phase;        // birth / live / dying / dead
-    unsigned char age;          // frames lived
-    unsigned char source_x;     // source tile x (0..39)
-    unsigned char source_y;     // source tile y (0..21 usually)
-    signed   char x;            // current screen cell x
-    signed   char y;            // current screen cell y
-    unsigned char display_slot; // which displayInstructions[] to use
-    AnimParams   params;
-    void (*step_fn)(struct CellState *);  // main behaviour
+    int source_x;
+    int source_y;
+    int x;
+    int y;
+    int state;              // was direction, now more general
+    CellStepFn step_fn;
 } CellState;
 
-/* ────────────────────────────────────────────────────────────────────────────
-   Globals
-   ──────────────────────────────────────────────────────────────────────────── */
+/* ============================================================================
+ * Globals – very close to original
+ * ============================================================================ */
 
-static CellState anim_slots[MAX_ANIM_INSTANCES];
+extern unsigned char currentSound[];
 
-static unsigned char should_play_sound = 1;
-static unsigned int  current_preset     = 0xFAA7;   // boot sound
+static int cursor_x = 2;
+static int cursor_y = 2;
+static int input_x  = 1;
+static int input_y  = 1;
+static int anim_x   = 12;
+static int anim_y   = 12;
+static int stoy_x   = 12;
+static int stoy_y   = 12;
 
-static signed char   cursor_x = 2;
-static signed char   cursor_y = 2;
-static signed char   input_x  = 1;
-static signed char   input_y  = 1;
+static unsigned char kp;                // <--- kept original name to avoid collision
 
-static unsigned char key_pressed;
+static unsigned char should_play = 1;
 
-/* ────────────────────────────────────────────────────────────────────────────
-   Forward declarations
-   ──────────────────────────────────────────────────────────────────────────── */
+static int g_state = CGEN_STATE_INIT;
 
-static void step_dancer     (CellState *self);
-static void step_dropper    (CellState *self);
-static void step_eater      (CellState *self);
-static void step_worm       (CellState *self);
-static void step_spark      (CellState *self);
-static void step_null       (CellState *self);
 
-static void spawn_animation(unsigned char kind, signed char sx, signed char sy);
-static void update_all_animations(void);
-static void blit_all_animations(void);
-static void handle_input(void);
-static void enter_hires_playground(void);
-static void print_help(void);
 
-/* ────────────────────────────────────────────────────────────────────────────
-   Step function implementations
-   ──────────────────────────────────────────────────────────────────────────── */
+/* ============================================================================
+ * Function prototypes
+ * ============================================================================ */
 
-static void step_null(CellState *self) {
-    (void)self;     // deliberately empty
-}
+static int clamp(int value, int min_val, int max_val);
+static void load_sound_table(unsigned int address);
+static void trigger_current_sound(unsigned int position);
 
-static void step_dancer(CellState *self) {
-    if (self->phase != PHASE_LIVE) return;
+static int set_display_instruction(int cell_idx, int src_x, int src_y, int dst_x, int dst_y);
 
-    self->x += self->params.dx;
-    self->y += self->params.dy;
+static void cell_blast(unsigned int ix, unsigned int iy);
+static void cell_ui_update(unsigned char key);
+static void cell_anim_update(unsigned char key);
+static void cell_hack_update(unsigned char key);
 
-    // bounce + direction change
-    if (self->x <= 3 || self->x >= 34) {
-        self->params.dx = -self->params.dx;
-        self->source_x = (self->source_x + 1) & 7;
-    }
-    if (self->y <= 4 || self->y >= 18) {
-        self->params.dy = -self->params.dy;
-        self->source_y = (self->source_y + 1) & 7;
-    }
+static void step_dancer(struct CellState *self);
+static void step_null(struct CellState *self);
 
-    self->age++;
-    if (self->params.max_age && self->age >= self->params.max_age) {
-        self->phase = PHASE_DYING;
-    }
-}
+static void validate_ui_bounds(unsigned char key);
+static void print_help_screen(void);
+static void gen_random_colors(void);
 
-static void step_dropper(CellState *self) {
-    if (self->phase != PHASE_LIVE) return;
 
-    self->y += 1;               // fall down
-    self->source_y = (self->source_y + 1) & 15;
-
-    if (self->y >= 19) {
-        self->phase = PHASE_DYING;
-        self->age = 0;
-    }
-}
-
-static void step_eater(CellState *self) {
-    if (self->phase == PHASE_BIRTH) {
-        self->phase = PHASE_LIVE;
-        self->age = 0;
-    }
-    if (self->phase != PHASE_LIVE) return;
-
-    // slowly shrink / fade simulation via source change
-    self->source_x = (self->source_x + 1) & 3;
-    self->age++;
-
-    if (self->age > 40) {
-        self->phase = PHASE_DYING;
-    }
-}
-
-static void step_worm(CellState *self) {
-    if (self->phase != PHASE_LIVE) return;
-
-    // snake-like movement – head moves, body follows (simplified)
-    self->x += self->params.dx;
-    self->y += (qrandomJ(peek(0x276)) & 3) - 1;   // small random y wander
-
-    if ((qrandomJ(peek(0x276)) & 15) == 0) {
-        self->params.dx = -self->params.dx;       // occasional direction flip
-    }
-
-    self->source_x = (self->source_x + 1) & 7;
-
-    if (self->x < 2 || self->x > 36) {
-        self->params.dx = -self->params.dx;
-    }
-
-    self->age++;
-    if (self->age > 120) self->phase = PHASE_DYING;
-}
-
-static void step_spark(CellState *self) {
-    if (self->phase == PHASE_BIRTH) {
-        self->phase = PHASE_LIVE;
-        self->age   = 0;
-        self->params.max_age = 12 + (qrandomJ(peek(0x276)) & 15);
-    }
-
-    if (self->phase != PHASE_LIVE) return;
-
-    // fast random walk + fade out
-    self->x += (qrandomJ(peek(0x276)) & 3) - 1;
-    self->y += (qrandomJ(peek(0x276)) & 3) - 1;
-
-    self->age++;
-    if (self->age >= self->params.max_age) {
-        self->phase = PHASE_DEAD;
-        self->active = 0;
-    }
-}
-
-/* ────────────────────────────────────────────────────────────────────────────
-   Animation spawning & management
-   ──────────────────────────────────────────────────────────────────────────── */
-
-static const struct {
-    unsigned char   source_tile_x;
-    unsigned char   source_tile_y_base;
-    signed char     init_dx;
-    signed char     init_dy;
-    unsigned char   maxlife;
-    void (*step)(CellState *);
-} spawn_presets[] = {
-    { 0, 0,  1,  1, 180, step_dancer   },   // 0
-    { 1, 2, -1,  1, 140, step_dancer   },
-    { 4, 1,  1, -1, 200, step_dancer   },
-    { 2, 4,  0,  1,  80, step_dropper  },   // 3
-    { 5, 3,  0,  0,  60, step_eater    },   // 4
-    { 3, 5,  1,  0, 150, step_worm     },   // 5
-    { 6, 2,  0,  0,  20, step_spark    },   // 6 – short life
+static CellState cellStates[] = {
+    {0, 0, ROW_WIDTH / 2, COL_HEIGHT / 2, 0 /* DIAG_FORWARD */,   step_null},
+    {1, 0, ROW_WIDTH / 2, COL_HEIGHT / 2, 1 /* DIAG_BACKWARD */, step_null},
+    {2, 0, ROW_WIDTH / 2, COL_HEIGHT / 2, 2 /* DIAG_LEFT */,     step_null},
+    {3, 0, ROW_WIDTH / 2, COL_HEIGHT / 2, 3 /* DIAG_RIGHT */,    step_null},
+    {4, 0, ROW_WIDTH / 2, COL_HEIGHT / 2, 2 /* DIAG_LEFT */,     step_null},
+    {5, 0, ROW_WIDTH / 2, COL_HEIGHT / 2, 3 /* DIAG_RIGHT */,    step_null}
 };
 
-#define NUM_SPAWN_TYPES     (sizeof(spawn_presets)/sizeof(spawn_presets[0]))
+ 
+/* ============================================================================
+ * Step functions
+ * ============================================================================ */
 
-static void spawn_animation(unsigned char kind, signed char sx, signed char sy) {
-    unsigned char i;
-    CellState *slot;
-
-    if (kind >= NUM_SPAWN_TYPES) return;
-
-    for (i = 0; i < MAX_ANIM_INSTANCES; i++) {
-        slot = &anim_slots[i];
-        if (!slot->active) {
-            slot->active       = 1;
-            slot->phase        = PHASE_BIRTH;
-            slot->age          = 0;
-            slot->source_x     = spawn_presets[kind].source_tile_x;
-            slot->source_y     = spawn_presets[kind].source_tile_y_base;
-            slot->x            = sx;
-            slot->y            = sy;
-            slot->display_slot = (i % 8) + 2;           // avoid cursor slots
-            slot->params.dx    = spawn_presets[kind].init_dx;
-            slot->params.dy    = spawn_presets[kind].init_dy;
-            slot->params.max_age = spawn_presets[kind].maxlife;
-            slot->step_fn      = spawn_presets[kind].step;
-            return;
-        }
-    }
-    // no free slot → overwrite oldest (simple)
-    slot = &anim_slots[0];
-    slot->active = 0;   // force respawn next frame
+static void step_null(struct CellState *self) {
+    self;
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
-   Core update & render loop helpers
-   ──────────────────────────────────────────────────────────────────────────── */
+static void step_dancer(struct CellState *self) {
+    if (!self) return;
 
-static void update_all_animations(void) {
-    unsigned char i;
-    CellState *self;
+    switch (self->state) {
+        case 0: self->x++; self->y++; break;
+        case 1: self->x--; self->y--; break;
+        case 2: self->x--; self->y++; break;
+        case 3: self->x++; self->y--; break;
+    }
 
-    for (i = 0; i < MAX_ANIM_INSTANCES; i++) {
-        self = &anim_slots[i];
-        if (!self->active) continue;
+    // Bounce & direction flip (original logic preserved)
+    if (self->x > 30) { self->x = 4;  self->state = (self->state + 1) % 4; }
+    if (self->y > 20) { self->y = 6;  self->state = (self->state + 3) % 4; }
+    if (self->x < 4)  { self->x = 30; self->state = (self->state + 1) % 4; }
+    if (self->y < 6)  { self->y = 20; self->state = (self->state + 3) % 4; }
+}
 
-        if (self->step_fn) {
-            self->step_fn(self);
-        }
+/* ============================================================================
+ * Core functions (mostly original)
+ * ============================================================================ */
 
-        // simple dying → dead transition
-        if (self->phase == PHASE_DYING) {
-            self->phase = PHASE_DEAD;
-            self->active = 0;
-        }
+static int clamp(int value, int min_val, int max_val) {
+    if (value < min_val) return min_val;
+    if (value > max_val) return max_val;
+    return value;
+}
+
+static void load_sound_table(unsigned int address) {
+    int i;
+    for (i = 0; i < 14; i++) {
+        currentSound[i] = peek(address + i);
     }
 }
 
-static void blit_all_animations(void) {
-    unsigned char i;
-    CellState *self;
+static void trigger_current_sound(unsigned int position) {
+    load_sound_table(position);
+    Synth();
+}
 
-    for (i = 0; i < MAX_ANIM_INSTANCES; i++) {
-        self = &anim_slots[i];
-        if (!self->active) continue;
-        if (self->phase == PHASE_DEAD) continue;
+static int set_display_instruction(int cell_idx, int src_x, int src_y, int dst_x, int dst_y) {
+    unsigned int src_base = SOURCE_BUFFER_BASE + (src_y * ROW_WIDTH * BLOCK_HEIGHT) + (src_x * 1);
+    unsigned int dst_base = DEST_BUFFER_BASE   + (dst_y * ROW_WIDTH * BLOCK_HEIGHT) + (dst_x * 1);
+    int row;
 
-        // skip if off-screen
-        if (self->x < 0 || self->x >= ROW_WIDTH ||
-            self->y < 0 || self->y >= COL_HEIGHT) continue;
+    if (cell_idx >= MAX_CB_DISPLAY_INSTRUCTIONS) return 1;
 
-        set_display_instruction(
-            self->display_slot,
-            self->source_x,
-            self->source_y,
-            self->x,
-            self->y
-        );
+    for (row = 0; row < BLOCK_HEIGHT; row++) {
+        unsigned int s = src_base + (row * ROW_WIDTH);
+        unsigned int d = dst_base + (row * ROW_WIDTH);
+
+        displayInstructions[cell_idx][3 + row * 6] = s & 0xFF;
+        displayInstructions[cell_idx][4 + row * 6] = s >> 8;
+        displayInstructions[cell_idx][6 + row * 6] = d & 0xFF;
+        displayInstructions[cell_idx][7 + row * 6] = d >> 8;
+    }
+    return 0;
+}
+
+static void update_cell_sources(void) {
+    cellStates[0].source_y = 1;
+    cellStates[1].source_y = 2;
+    cellStates[2].source_y = 3;
+    cellStates[3].source_y = 4;
+    cellStates[4].source_y = 5;
+    cellStates[5].source_y = 6;
+}
+
+static void cell_blast(unsigned int input_x, unsigned int input_y) {
+    int col;
+    for (col = 0; col < ROW_WIDTH;  col++) set_display_instruction(col, col, 0, col, 4);
+    for (col = 0; col < COL_HEIGHT; col++) set_display_instruction(col, col, 1, 4, col);
+}
+
+static void cell_ui_update(unsigned char key) {
+    key=0;//unused for now
+    set_display_instruction(CURS1, input_x, input_y, cursor_x, cursor_y);
+    set_display_instruction(CURS2, input_x, input_y, cursor_x + 1, cursor_y + 1);
+    set_display_instruction(CURS1, input_x + 1, input_y, cursor_x, cursor_y + 1);
+    set_display_instruction(CURS2, input_x, input_y + 1, cursor_x + 1, cursor_y);
+}
+
+static void cell_anim_update(unsigned char key) {
+    int i;
+    key=0;//unused for now
+    for (i = 0; i < 6; i++) {
+        CellState *c = &cellStates[i];
+        if (c->step_fn) c->step_fn(c);
+        set_display_instruction(ANIM1 + i, c->source_x, c->source_y, c->x, c->y);
     }
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
-   Input & UI
-   ──────────────────────────────────────────────────────────────────────────── */
+static void cell_hack_update(unsigned char key) {
+    // original stub – kept for compatibility
+    int rval;
+    key=0;//unused for now
+    stoy_x += g_state;
+    stoy_y += g_state;
+    if (stoy_x > ROW_WIDTH)  stoy_x = 0;
+    if (stoy_y > COL_HEIGHT) stoy_y = 0;
 
-static void handle_input(void) {
-    signed char moved = 0;
-
-    switch (key_pressed) {
-        case KEY_LEFT:   cursor_x--; moved=1; break;
-        case KEY_RIGHT:  cursor_x++; moved=1; break;
-        case KEY_UP:     cursor_y--; moved=1; break;
-        case KEY_DOWN:   cursor_y++; moved=1; break;
-
-        case KEY_BLAST:
-            spawn_animation(6, cursor_x, cursor_y);   // sparks!
-            spawn_animation(3, cursor_x, cursor_y);   // droppers
-            break;
-
-        case '1': spawn_animation(0, cursor_x, cursor_y); break;
-        case '2': spawn_animation(1, cursor_x, cursor_y); break;
-        case '3': spawn_animation(2, cursor_x, cursor_y); break;
-        case '4': spawn_animation(3, cursor_x, cursor_y); break;
-        case '5': spawn_animation(4, cursor_x, cursor_y); break;
-        case '6': spawn_animation(5, cursor_x, cursor_y); break;
-        case '7': spawn_animation(6, cursor_x, cursor_y); break;
-
-        case KEY_CAPTURE:
-            // placeholder – you can expand later
-            break;
-    }
-
-    if (moved) {
-        cursor_x = clamp(cursor_x, 0, ROW_WIDTH-1);
-        cursor_y = clamp(cursor_y, 0, COL_HEIGHT-1);
-    }
+    rval = qrandomJ(peek(0x276)) % COL_HEIGHT;
+    set_display_instruction(STOY1, 1, rval, stoy_x, stoy_y + 1);
+    set_display_instruction(STOY2, 2, rval, stoy_x, stoy_y + 2);
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
-   Entry points & main logic
-   ──────────────────────────────────────────────────────────────────────────── */
+static void validate_ui_bounds(unsigned char key) {
+    if (key == KEY_CURSOR_LEFT)  cursor_x--;
+    if (key == KEY_CURSOR_RIGHT) cursor_x++;
+    if (key == KEY_CURSOR_UP)    cursor_y--;
+    if (key == KEY_CURSOR_DOWN)  cursor_y--;
 
-static void enter_hires_playground(void) {
-    unsigned char i;
-
-    hires();
-    paper(0); ink(6);
-
-    // clear animation slots
-    for (i = 0; i < MAX_ANIM_INSTANCES; i++) {
-        anim_slots[i].active = 0;
+    if (key == KEY_BLAST) {
+        cell_blast(input_x, input_y);
     }
 
-    // initial spawn
-    spawn_animation(0, 10, 8);
-    spawn_animation(1, 28, 8);
-    spawn_animation(5, 20, 14);
+    cursor_x = clamp(cursor_x, 2, 37);
+    cursor_y = clamp(cursor_y, 2, 19);
+}
 
-    gen_random_colors();    // assuming this function still exists
+static void print_help_screen(void) {
+    cls();
+    paper(0);
+    ink(5);
+    printf("\n soundtoy 1.1.2-fix\n\n");
+    printf(" ?  help\n G  hires mode\n Q  quit\n");
+    printf(" J/K  next/prev preset   R  boot   .  ping\n");
+    printf(" P  set preset address\n SPACE  play current\n\n");
+    printf("In hires:\n A D W S  move cursor\n B  blast\n");
+}
 
-    while (1) {
-        key_pressed = key();
+static void gen_random_colors(void) {
+    unsigned int j = 0xA000;
+    unsigned int end = j + 320*3;
+    unsigned char rg;
+    do {
+#ifdef USE_SAFE_TABLE
+	rg = GetSafeColour();
+#else
+        do {
+            rg = qrandomJ(peek(0x276)) & 255;
+        } while ((rg & 0xF8) == 0x08 || (rg & 0xF8) == 0x18 ||
+                 (rg & 0xF8) == 0x88 || (rg & 0xF8) == 0x98);
+#endif
+        poke(j++, rg);
+    } while (j < end);
+}
 
-        if (key_pressed == KEY_QUIT) break;
-        if (key_pressed == KEY_HELP) {
-            text(); print_help(); hires(); continue;
+/* ============================================================================
+ * Main
+ * ============================================================================ */
+
+void main(void) {
+    unsigned int current_pos = POS_INITIAL;
+    char edit_mode = 0;
+
+    int i;
+    for (i = 0; i < 6; i++) {
+        cellStates[i].step_fn = step_dancer;   // all dancers for now – original behaviour
+    }
+
+    update_cell_sources();
+
+    setflags(SCREEN + NOKEYCLICK);
+    poke(0x24E, 5);
+    poke(0x24F, 2);
+    poke(0x26A, 10);
+
+    print_help_screen();
+    Synth();
+
+    while ((kp = key()) != KEY_QUIT) {
+        if (!edit_mode) {
+            if (kp == KEY_HIRES_MODE) {
+                edit_mode = 1;
+                hires();
+                poke(0x26A, 10);
+                gen_random_colors();
+                load_sound_table(current_pos);
+                continue;
+            }
+
+            if (kp == KEY_POS_INCREMENT) current_pos++;
+            if (kp == KEY_POS_DECREMENT) current_pos--;
+            if (kp == KEY_RESET_PRESET) current_pos = POS_INITIAL;
+            if (kp == KEY_RESET_PING)   current_pos = POS_KEYCLICK;
+            if (kp == KEY_SET_POSITION) {
+                unsigned int val;
+                printf("Pos: 0x"); scanf("%x", &val);
+                current_pos = val;
+            }
+            if (kp == KEY_HELP) print_help_screen();
+            if (kp == KEY_TRIGGER_SPACE || kp > 32) {
+                trigger_current_sound(current_pos);
+            }
+
+            continue;
         }
 
-        handle_input();
+        // hires mode
+        if (kp == KEY_QUIT || kp == KEY_HIRES_MODE) {
+            edit_mode = 0;
+            text();
+            continue;
+        }
 
-        update_all_animations();
-        blit_all_animations();
-
-        // UI cursor – always on top
-        set_display_instruction(0, input_x, input_y, cursor_x, cursor_y);
+        validate_ui_bounds(kp);
+        cell_ui_update(kp);
+        cell_anim_update(kp);
+        //cell_hack_update(kp);
 
         call((unsigned int)&displayInstructions[0]);
     }
 
     text();
-}
-
-static void print_help(void) {
-    cls(); paper(0); ink(7);
-    printf("\n   soundtoy / gfx playground  (v1.2)\n\n");
-    printf(" ?      this help\n");
-    printf(" G      enter graphics mode\n");
-    printf(" Q      quit\n\n");
-    printf("In graphics mode:\n");
-    printf(" W A S D    move cursor\n");
-    printf(" 1..7       spawn different animations\n");
-    printf(" B          burst (sparks + droppers)\n");
-    printf(" ?          help again\n");
-    printf(" Q          exit gfx mode\n\n");
-    get();
-}
-
-void main(void) {
-    setflags(SCREEN + NOKEYCLICK);
-    poke(0x26A, 10);        // disable keyclick
-
-    // preset mode (simplified – extend as needed)
-    while (1) {
-        print_help();
-        key_pressed = key();
-
-        if (key_pressed == KEY_HIRES_MODE) {
-            enter_hires_playground();
-            continue;
-        }
-        if (key_pressed == KEY_QUIT) break;
-
-        // ... original preset / sound logic here ...
-        // (you can copy-paste back your preset navigation)
-    }
-
-    text();
-//    load_sound_table((unsigned int)&BootSound);
+    load_sound_table(POS_INITIAL);
     Synth();
 }
-
