@@ -126,6 +126,16 @@ static CellState cellStates[] = {
     {5, 0, ROW_WIDTH / 2, COL_HEIGHT / 2, 3 /* DIAG_RIGHT */,    step_null}
 };
 
+
+// xorshift8 - pseudo-random number generator
+uint8_t xsy = 1;   // must be non-zero
+
+uint8_t xorshift8(void) {
+    xsy ^= xsy << 7;
+    xsy ^= xsy >> 5;
+    xsy ^= xsy << 3;
+    return xsy;
+}
  
 /* ============================================================================
  * Step functions
@@ -273,8 +283,10 @@ static void gen_random_colors(void) {
 #ifdef USE_SAFE_TABLE
 	rg = GetSafeColour();
 #else
+		xsy = 1;
         do {
-            rg = qrandomJ(peek(0x276)) & 255;
+            //rg = qrandomJ(peek(0x276)) & 255;
+            rg = xorshift8();
         } while ((rg & 0xF8) == 0x08 || (rg & 0xF8) == 0x18 ||
                  (rg & 0xF8) == 0x88 || (rg & 0xF8) == 0x98);
 #endif
