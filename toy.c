@@ -24,7 +24,7 @@
 #define DENSE_FORCE_BIT6  0x40
 #define DENSE_INVERSE     0x80
 
-static inline unsigned char dense_pixel(unsigned char bits6, int inverse)
+static unsigned char dense_pixel(unsigned char bits6, int inverse)
 {
     return (bits6 & DENSE_PIXEL_MASK) | DENSE_FORCE_BIT6 | (inverse ? DENSE_INVERSE : 0);
 }
@@ -39,7 +39,7 @@ typedef struct {
 #define CELL_BIT_COLOUR(c, bit) \
     ( ((c).inv) ? (((bit) ? (c).ink : (c).paper) ^ 7) : ((bit) ? (c).ink : (c).paper) )
 
-static inline int cell_transfer_impl(Cell *src, Cell *dst,
+static int cell_transfer_impl(Cell *src, Cell *dst,
                                      unsigned char colour,
                                      unsigned char leftover)
 {
@@ -175,7 +175,7 @@ static void blob_init(Blob *b, int x, int y, int dir, unsigned char bias)
 {
     int i;
     b->base_x = x;
-    b->base_y = y;
+    b->base_y = 0;   /* start at top of screen */
     b->dir    = dir;
     for (i = 0; i < BLOB_CELLS; i++) {
         b->cells[i].paper = 0;               /* black paper */
@@ -203,8 +203,25 @@ static void blob_draw(Blob *b)
 static void blob_move(Blob *b)
 {
     b->base_x += b->dir;
-    if (b->dir > 0 && b->base_x > 18) b->base_x = 18;
-    if (b->dir < 0 && b->base_x < 19) b->base_x = 19;
+    b->base_y += 1;
+
+    /* Bounce vertically: drop from top, bounce back up */
+    if (b->base_y > 18) {
+        b->base_y = 0;
+        b->dir = +1;   /* bounce back DOWN */
+    } else if (b->base_y < 0) {
+        b->base_y = 18;
+        b->dir = -1;   /* bounce back UP */
+    }
+
+    /* Bounce horizontally: meet at centre but do not cross */
+    if (b->dir > 0 && b->base_x > 18) {
+        b->base_x = 18;
+        b->dir = -1;
+    } else if (b->dir < 0 && b->base_x < 19) {
+        b->base_x = 19;
+        b->dir = +1;
+    }
 }
 
 /* Exchange sub-pixels between corresponding cells of the two blobs */
@@ -226,8 +243,8 @@ static void blob_exchange(Blob *a, Blob *b)
 
 extern unsigned char currentSound[];
 
-static int cursor_x = 2;
-static int cursor_y = 2;
+static int cursor_x = 12;
+static int cursor_y = 12;
 static int input_x  = 1;
 static int input_y  = 1;
 static int anim_x   = 12;
@@ -252,14 +269,12 @@ static CellState cellStates[] = {
 /* xorshift8                                                          */
 /* ------------------------------------------------------------------ */
 
-uint8_t xsy = 1;
-
-uint8_t xorshift8(void)
+unsigned char xorshift8(unsigned char *xsy)
 {
-    xsy ^= xsy << 7;
-    xsy ^= xsy >> 5;
-    xsy ^= xsy << 3;
-    return xsy;
+    *xsy ^= *xsy << 7;
+    *xsy ^= *xsy >> 5;
+    *xsy ^= *xsy << 3;
+    return *xsy;
 }
 
 /* ------------------------------------------------------------------ */
@@ -348,8 +363,8 @@ static void cell_ui_update(unsigned char key)
     key = 0;
     set_display_instruction(CURS1, input_x, input_y, cursor_x, cursor_y);
     set_display_instruction(CURS2, input_x, input_y, cursor_x + 1, cursor_y + 1);
-    set_display_instruction(CURS1, input_x + 1, input_y, cursor_x, cursor_y + 1);
-    set_display_instruction(CURS2, input_x, input_y + 1, cursor_x + 1, cursor_y);
+//    set_display_instruction(CURS1, input_x + 1, input_y, cursor_x, cursor_y + 1);
+//    set_display_instruction(CURS2, input_x, input_y + 1, cursor_x + 1, cursor_y);
 }
 
 static void cell_anim_update(unsigned char key)
@@ -384,8 +399,9 @@ static void validate_ui_bounds(unsigned char key)
     if (key == KEY_CURSOR_DOWN)  cursor_y++;
     if (key == KEY_BLAST)        cell_blast(input_x, input_y);
 
-    cursor_x = clamp(cursor_x, 2, 37);
-    cursor_y = clamp(cursor_y, 2, 19);
+    cursor_x = clamp(cursor_x, 2, 22);
+    /* Extended Y range to allow cursor to move up from row 2 */
+    cursor_y = clamp(cursor_y, 0, 19);
 }
 
 static void print_help_screen(void)
@@ -401,16 +417,16 @@ static void print_help_screen(void)
     printf(" Blobs exchange colours while approaching\n");
 }
 
-/* Random colour field (top 24 lines) – original safe-attribute filter */
+/* Random colour field (entire hires screen) */
 static void gen_random_colors(void)
 {
     unsigned int j = 0xA000;
-    unsigned int end = j + 320 * 3;
+    unsigned int end = j + (320 * 24);
     unsigned char rg;
+	unsigned char xsy = 1;
     do {
-        xsy = 1;
         do {
-            rg = xorshift8();
+            rg = xorshift8(&xsy);
         } while ((rg & 0xF8) == 0x08 || (rg & 0xF8) == 0x18 ||
                  (rg & 0xF8) == 0x88 || (rg & 0xF8) == 0x98);
         poke(j++, rg);
@@ -450,8 +466,8 @@ void main(void)
                 gen_random_colors();
 
                 /* place the two blobs at opposite ends of the random field */
-                blob_init(&blobL,  2,  4, +1, 2);   /* left,  green-biased, moves right */
-                blob_init(&blobR, 30,  4, -1, 1);   /* right, red-biased,   moves left  */
+                blob_init(&blobL,  2,  0, +1, 4);   /* left,  green-biased, moves right */
+                blob_init(&blobR, 30,  0, -1, 6);   /* right, red-biased, moves left */
                 blob_draw(&blobL);
                 blob_draw(&blobR);
 
