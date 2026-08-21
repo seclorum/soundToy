@@ -6,13 +6,13 @@ export LM_STUDIO_API_KEY=lm-studio   # any non-empty value
 #  --model openai/deepseek-v4-pro-qwen3.5-9b-mtp \
 #  --model openai/mlx-qwen3.5-9b-deepseek-v4-flash \
 #  --openai-api-base http://localhost:1234/v1 \
-#  --openai-api-key lm-studio \
 
 aider \
   --model openai/mlx-qwen3.5-9b-deepseek-v4-flash \
   --architect \
   --edit-format diff \
   --no-auto-commits \
+  --openai-api-key lm-studio \
   toy.c
 
 
