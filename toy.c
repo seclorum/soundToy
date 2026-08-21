@@ -1,16 +1,262 @@
 /*
- * soundtoy - A Sound Exploration Toy for Oric-1 Atmos
- *
- * Version: 1.2.0-dense (integrated dense-cell + exchange-rule system)
- * Author:  Original by Jay Vaughan – dense blob exchange by Grok
- *
- * Changes from 1.1.2-fix:
- *  • Added dense CELL representation and colour-exchange rules
- *  • Two 8-cell “blobs” (6×8 pixel regions) placed at left/right ends
- *    of the random colour field
- *  • Each frame the blobs move toward each other while exchanging
- *    sub-pixels according to the rule system
- *  • Existing UI / sound / dancer logic preserved and cleaned
+   soundtoy - A Sound Exploration Toy for Oric-1 Atmos
+  
+   Version: 1.2.0-dense (integrated dense-cell + exchange-rule system)
+   Author:  Original by Jay Vaughan – dense blob exchange by Grok
+  
+   Changes from 1.1.2-fix:
+    • Added dense CELL representation and colour-exchange rules
+    • Two 8-cell “blobs” (6×8 pixel regions) placed at left/right ends
+      of the random colour field
+    • Each frame the blobs move toward each other while exchanging
+      sub-pixels according to the rule system
+    • Existing UI / sound / dancer logic preserved and cleaned
+  
+   Notes:
+  
+	- The goal is to have as dense a colour environment as 
+	possible, within the limits of the Orics' attribute system 
+	while using that attribute system to add a dynamic nature 
+	to the program. The rule set is intended to be able to 
+	create 'characters' - 6x8 cells - which react to each other 
+	based on the rule set. 
+
+	A "blob" is a set of 3 consecutive bytes in the hires 
+	display, which can be used in a rule set to determine 
+	'behaviour' (move, rotate bits, exchange content, activate 
+	inverse attribute)
+
+	displayInstructions contains assembly code to MOV bytes to
+	the HIRES memory area, so the game loop sets the content
+	of this array and then calls the array to effect a 
+	screen update. It is intentionally a fall-through 
+	40-instruction 6502 routine.
+
+	The important properties are (gencode.h):
+
+		#define MAX_CB_DISPLAY_INSTRUCTIONS 40
+
+		unsigned char displayInstructions[40][51];
+
+		and each instruction performs eight:
+
+		LDA source,X
+		STA destination,X
+		operations.
+
+		The final instruction terminates with RTS.
+
+	The intention of the design is to do this:
+
+		$A000 is the actual dense world.
+		Character = 6×8 pixels = 3 bytes × 8 rows.
+		13×25 characters fill 39 of the 40 bytes on every scanline.
+		The 40th byte is deliberately used as a one-byte dynamic colour gutter.
+		The logical world lives in RAM as Character world[25][13].
+		Only changed characters are rendered.
+		The existing gencode machinery remains intact for the original UI/animation layer.
+		Dense mode does not invoke the legacy display-copy chain, because that would overwrite the simulated world.
+		The actor system operates on actual 6×8 characters rather than oversized 24-byte blobs.
+		Two actors interact with both the environment and each other.
+		The Oric's two-colour attribute constraint becomes part of the rules.
+		
+		The Oric doesn't simply have:
+
+				byte 0 = paper
+				byte 1 = ink
+				byte 2 = pixels
+
+			as independent per-character attributes.
+
+		The attribute bytes establish colour state for subsequent 
+		display bytes. The Oric documentation describes the HIRES 
+		screen as 200×40 memory locations and explains that 
+		attribute positions affect the locations to their right 
+		until another attribute changes the state.
+
+		That means the 3-byte representation:
+
+					P I X
+	
+			is an extremely useful logical representation, but 
+		physically the attribute state can extend beyond that 
+		3-byte group.
+
+		And this is where the experiment gets really interesting.
+
+		The 13-character grid:
+
+			P I X | P I X | P I X | ...
+
+			is effectively making every 6×8 character an 
+		independent colour island.
+	
+		That is probably the right abstraction for the experiment, 
+		because it gives the rule system a well-defined locality.
+		Why I changed the actor architecture
+
+	Original design was:
+		blobL
+		blobR
+	each containing eight cells laid horizontally.
+	That made each "blob":
+	8 × 3 = 24 bytes wide
+		which simply cannot fit in a 40-byte scanline twice. 
+	The original positions x=2 and x=30 consequently make the right blob run off the HIRES row. 
+
+	The new architecture instead should instead make an actor one Character:
+     6 pixels
+   ┌──────────┐
+   │          │
+   │          │
+   │          │  8 pixels
+   │          │
+   │          │
+   │          │
+   │          │
+   │          │
+   └──────────┘
+and it moves on the:
+	13 × 25
+Character lattice.
+
+	That means actor motion and colour interaction happen at the same conceptual resolution.
+
+	The next optimisation should be to make the rule engine return 
+whether a Character actually changed.
+
+	Then instead of:
+
+			actor
+			 ↓
+			rule
+			 ↓
+			mark character dirty
+
+			we get:
+
+			rule
+			 ↓
+			changed?
+			 ├── no  → nothing
+			 └── yes → dirty = 1
+
+	That becomes important once we start having dozens of interacting Characters.
+
+ * Current state:
+
+	A rudimentary set of functions for implementing a UI in 
+	HIRES mode are completed.  There is a basic cursor which
+	can be moved with the AWSD keys, and there is provision
+	for an 'input selector' interface, which could be moved
+	with the JIKL keys.  There is also a rudimentary "dancer"
+	function, which is supposed to dance around the screen
+	having rules applied to it. 
+
+	These are all in prototype state however.
+
+	A character is 6×8 pixels.
+
+	Each of its 8 rows is one dense HIRES byte.
+
+	Each row has its own paper + ink + dense pixel byte, giving a 3-byte representation.
+
+	Therefore one blob occupies 3 bytes × 8 scanlines = 24 bytes.
+
+		blob[1]=attribute blob[2]=pixels blob[3]=attribute
+
+	The 40-byte HIRES line can contain 13 complete characters (13 × 3 = 39), with one byte left over.
+
+	The 200-line HIRES screen contains exactly 25 character rows.
+
+	So the natural dense world is 13 × 25 = 325 characters.
+
+	The background itself is therefore made from characters, rather than a conventional bitmap with a couple of blobs painted on top.
+
+	Two or more active characters can then move through this world and modify/exchange their colour sub-pixels according to rules which evaluate the attributes in blob[1] .. the (character) pixel data in blob[2] .. and the attribute data in blob[3]
+
+	The purpose of a rule is to determine what modifications should 
+be made to blob[1] .. blob[2] .. blob[3] .. if any, when another 
+blob is compared.  8 blobs per 6x8 character means that there will be interesting interactions between characters on a random playfield as the rules are applied.
+
+
+	The next version of the rules could be substantially more 
+	ambitious.
+
+	The current rules are still basically:
+
+		colour A moves from Character X → Character Y
+
+	But the actual goal suggests a much more interesting model:
+
+				Character state
+
+	Each character could have:
+
+			typedef struct
+			{
+			    Cell row[8];
+			
+			    unsigned char rule;
+			    unsigned char energy;
+			    unsigned char age;
+			    unsigned char affinity;
+			    unsigned char mutation;
+			} Character;
+
+	Then rules could operate at three levels:
+
+			Pixel
+			red pixel attracts red
+
+			Attribute
+			two neighbouring rows with the same ink merge
+
+			Character
+			two characters with similar palettes cooperate
+			different palettes repel
+
+	That would let the screen develop things like:
+				AAAA BBBB CCCC
+				AAAA BBBB CCCC
+				AAAA BBBB CCCC
+				       ↓
+				AAAAAABBBBBCCC
+				       ↓
+				AAAAAABBBCCCCCC
+				       ↓
+				AAAAABBBBBCCCC
+	without ever violating the Oric's fundamental colour limitation.
+
+	And because each Character is exactly 6×8, the resulting 
+	entities can genuinely become little visual "organisms".
+
+	The 40th byte—the one byte left over after 13×3—is also 
+	potentially useful. I made it a moving gutter for now, but 
+	I would eventually use it as a boundary/communication channel 
+	between character rows rather than waste it.
+
+	That gives a very clean experimental topology:
+
+             13 Characters
+       ┌───┬───┬───┬───┬───┐
+       │   │   │   │   │   │
+       ├───┼───┼───┼───┼───┤
+       │   │   │   │   │   │
+       ├───┼───┼───┼───┼───┤
+       │   │   │   │   │   │
+       └───┴───┴───┴───┴───┘
+                         │
+                    1-byte channel
+
+	Don't fight the Oric's attribute system — make the 
+	attribute propagation rules the physics of the world.
+
+ . Bugs:
+
+	- dir is being used for horizontal motion, but the 
+	vertical code treats it as vertical velocity
+
  */
 
 #include <lib.h>
