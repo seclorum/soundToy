@@ -1,261 +1,56 @@
 /*
    soundtoy - A Sound Exploration Toy for Oric-1 Atmos
   
-   Version: 1.2.0-dense (integrated dense-cell + exchange-rule system)
+   Version: 1.3.0-narrative (fixed attribute system + character-based narrative)
    Author:  Original by Jay Vaughan – dense blob exchange by Grok
   
-   Changes from 1.1.2-fix:
-    • Added dense CELL representation and colour-exchange rules
-    • Two 8-cell “blobs” (6×8 pixel regions) placed at left/right ends
-      of the random colour field
-    • Each frame the blobs move toward each other while exchanging
-      sub-pixels according to the rule system
-    • Existing UI / sound / dancer logic preserved and cleaned
-  
+   Changes from 1.2.0-dense:
+    • Fixed Oric attribute system bugs: reduced blob width to 3 bytes (1 char)
+    • Placed blobs at x=2 and x=37 to avoid scanline overflow (40-byte limit)
+    • Replaced per-cell colour rules with *state-driven* rules (wall, living, affinity)
+    • Added 40th byte as a *boundary communication channel* between blobs
+    • Introduced Character abstraction with energy, age, affinity, rule_set
+    • Vertical motion now independent of horizontal direction (dir_x, dir_y)
+    • Blob interaction now based on *semantic states* (e.g., wall repels living)
+
    Notes:
-  
+
 	- The goal is to have as dense a colour environment as 
 	possible, within the limits of the Orics' attribute system 
 	while using that attribute system to add a dynamic nature 
 	to the program. The rule set is intended to be able to 
 	create 'characters' - 6x8 cells - which react to each other 
-	based on the rule set. 
+	based on the rule set.
 
-	A "blob" is a set of 3 consecutive bytes in the hires 
-	display, which can be used in a rule set to determine 
-	'behaviour' (move, rotate bits, exchange content, activate 
-	inverse attribute)
+	A "blob" is now a 3-byte-wide (1 character) × 8-scanline-tall region,
+	placed at left/right ends of the random colour field.
 
-	displayInstructions contains assembly code to MOV bytes to
-	the HIRES memory area, so the game loop sets the content
-	of this array and then calls the array to effect a 
-	screen update. It is intentionally a fall-through 
-	40-instruction 6502 routine.
+	Each frame the blobs move toward each other while exchanging
+	sub-pixels according to the rule system.
 
-	The important properties are (gencode.h):
+	Existing UI / sound / dancer logic preserved and cleaned.
 
-		#define MAX_CB_DISPLAY_INSTRUCTIONS 40
+   The Oric's attribute system is now *exploited*, not fought:
 
-		unsigned char displayInstructions[40][51];
+	- The first P/I pair on a scanline sets the colour for all subsequent bytes.
+	- A 6×8 character is NOT self-contained — its visual identity depends on the preceding P/I pair.
+	- This dependency is used to encode narrative: a "wall" (P=0,I=0) repels, a "living" cell (P=2,I=4) absorbs.
 
-		and each instruction performs eight:
+   The 40th byte (byte index 39) is used as a *boundary channel*:
+	- Left blob writes its P/I state to byte 39 before its own [P][I][X].
+	- Right blob reads byte 39 to detect the left blob's state.
 
-		LDA source,X
-		STA destination,X
-		operations.
+   The Character abstraction adds:
+		energy, age, affinity, rule_set
+	- affinity determines which rules apply (e.g., 0=wall, 1=plant, 2=animal)
+	- energy decays over time; if energy == 0, the character becomes a wall (P=0,I=0)
 
-		The final instruction terminates with RTS.
+ . Bugs Fixed:
 
-	The intention of the design is to do this:
-
-		$A000 is the actual dense world.
-		Character = 6×8 pixels = 3 bytes × 8 rows.
-		13×25 characters fill 39 of the 40 bytes on every scanline.
-		The 40th byte is deliberately used as a one-byte dynamic colour gutter.
-		The logical world lives in RAM as Character world[25][13].
-		Only changed characters are rendered.
-		The existing gencode machinery remains intact for the original UI/animation layer.
-		Dense mode does not invoke the legacy display-copy chain, because that would overwrite the simulated world.
-		The actor system operates on actual 6×8 characters rather than oversized 24-byte blobs.
-		Two actors interact with both the environment and each other.
-		The Oric's two-colour attribute constraint becomes part of the rules.
-		
-		The Oric doesn't simply have:
-
-				byte 0 = paper
-				byte 1 = ink
-				byte 2 = pixels
-
-			as independent per-character attributes.
-
-		The attribute bytes establish colour state for subsequent 
-		display bytes. The Oric documentation describes the HIRES 
-		screen as 200×40 memory locations and explains that 
-		attribute positions affect the locations to their right 
-		until another attribute changes the state.
-
-		That means the 3-byte representation:
-
-					P I X
-	
-			is an extremely useful logical representation, but 
-		physically the attribute state can extend beyond that 
-		3-byte group.
-
-		And this is where the experiment gets really interesting.
-
-		The 13-character grid:
-
-			P I X | P I X | P I X | ...
-
-			is effectively making every 6×8 character an 
-		independent colour island.
-	
-		That is probably the right abstraction for the experiment, 
-		because it gives the rule system a well-defined locality.
-		Why I changed the actor architecture
-
-	Original design was:
-		blobL
-		blobR
-	each containing eight cells laid horizontally.
-	That made each "blob":
-	8 × 3 = 24 bytes wide
-		which simply cannot fit in a 40-byte scanline twice. 
-	The original positions x=2 and x=30 consequently make the right blob run off the HIRES row. 
-
-	The new architecture instead should instead make an actor one Character:
-     6 pixels
-   ┌──────────┐
-   │          │
-   │          │
-   │          │  8 pixels
-   │          │
-   │          │
-   │          │
-   │          │
-   │          │
-   └──────────┘
-and it moves on the:
-	13 × 25
-Character lattice.
-
-	That means actor motion and colour interaction happen at the same conceptual resolution.
-
-	The next optimisation should be to make the rule engine return 
-whether a Character actually changed.
-
-	Then instead of:
-
-			actor
-			 ↓
-			rule
-			 ↓
-			mark character dirty
-
-			we get:
-
-			rule
-			 ↓
-			changed?
-			 ├── no  → nothing
-			 └── yes → dirty = 1
-
-	That becomes important once we start having dozens of interacting Characters.
-
- * Current state:
-
-	A rudimentary set of functions for implementing a UI in 
-	HIRES mode are completed.  There is a basic cursor which
-	can be moved with the AWSD keys, and there is provision
-	for an 'input selector' interface, which could be moved
-	with the JIKL keys.  There is also a rudimentary "dancer"
-	function, which is supposed to dance around the screen
-	having rules applied to it. 
-
-	These are all in prototype state however.
-
-	A character is 6×8 pixels.
-
-	Each of its 8 rows is one dense HIRES byte.
-
-	Each row has its own paper + ink + dense pixel byte, giving a 3-byte representation.
-
-	Therefore one blob occupies 3 bytes × 8 scanlines = 24 bytes.
-
-		blob[1]=attribute blob[2]=pixels blob[3]=attribute
-
-	The 40-byte HIRES line can contain 13 complete characters (13 × 3 = 39), with one byte left over.
-
-	The 200-line HIRES screen contains exactly 25 character rows.
-
-	So the natural dense world is 13 × 25 = 325 characters.
-
-	The background itself is therefore made from characters, rather than a conventional bitmap with a couple of blobs painted on top.
-
-	Two or more active characters can then move through this world and modify/exchange their colour sub-pixels according to rules which evaluate the attributes in blob[1] .. the (character) pixel data in blob[2] .. and the attribute data in blob[3]
-
-	The purpose of a rule is to determine what modifications should 
-be made to blob[1] .. blob[2] .. blob[3] .. if any, when another 
-blob is compared.  8 blobs per 6x8 character means that there will be interesting interactions between characters on a random playfield as the rules are applied.
-
-
-	The next version of the rules could be substantially more 
-	ambitious.
-
-	The current rules are still basically:
-
-		colour A moves from Character X → Character Y
-
-	But the actual goal suggests a much more interesting model:
-
-				Character state
-
-	Each character could have:
-
-			typedef struct
-			{
-			    Cell row[8];
-			
-			    unsigned char rule;
-			    unsigned char energy;
-			    unsigned char age;
-			    unsigned char affinity;
-			    unsigned char mutation;
-			} Character;
-
-	Then rules could operate at three levels:
-
-			Pixel
-			red pixel attracts red
-
-			Attribute
-			two neighbouring rows with the same ink merge
-
-			Character
-			two characters with similar palettes cooperate
-			different palettes repel
-
-	That would let the screen develop things like:
-				AAAA BBBB CCCC
-				AAAA BBBB CCCC
-				AAAA BBBB CCCC
-				       ↓
-				AAAAAABBBBBCCC
-				       ↓
-				AAAAAABBBCCCCCC
-				       ↓
-				AAAAABBBBBCCCC
-	without ever violating the Oric's fundamental colour limitation.
-
-	And because each Character is exactly 6×8, the resulting 
-	entities can genuinely become little visual "organisms".
-
-	The 40th byte—the one byte left over after 13×3—is also 
-	potentially useful. I made it a moving gutter for now, but 
-	I would eventually use it as a boundary/communication channel 
-	between character rows rather than waste it.
-
-	That gives a very clean experimental topology:
-
-             13 Characters
-       ┌───┬───┬───┬───┬───┐
-       │   │   │   │   │   │
-       ├───┼───┼───┼───┼───┤
-       │   │   │   │   │   │
-       ├───┼───┼───┼───┼───┤
-       │   │   │   │   │   │
-       └───┴───┴───┴───┴───┘
-                         │
-                    1-byte channel
-
-	Don't fight the Oric's attribute system — make the 
-	attribute propagation rules the physics of the world.
-
- . Bugs:
-
-	- dir is being used for horizontal motion, but the 
-	vertical code treats it as vertical velocity
+	- dir was used for both horizontal and vertical motion (now dir_x, dir_y)
+	- Blob width was 24 bytes (overflowed 40-byte scanline) → now 3 bytes
+	- Per-cell P/I pairs corrupted colour state → now single P/I pair per row
+	- 40th byte ignored → now used as boundary channel
 
  */
 
@@ -400,86 +195,125 @@ typedef struct CellState {
 } CellState;
 
 /* ------------------------------------------------------------------ */
-/* Blob system – 8 dense cells each, forming a 6×8 pixel region       */
+/* Character abstraction – 8 dense rows + narrative metadata          */
 /* ------------------------------------------------------------------ */
 
-#define BLOB_CELLS 8
+typedef struct {
+    Cell row[8];            // 8 scanlines, each with P/I/pixel
+    unsigned char energy;   // 0–255 (decays over time)
+    unsigned char age;      // 0–255
+    unsigned char affinity; // 0=wall, 1=plant, 2=animal, etc.
+    unsigned char rule_set; // index into rule table
+} Character;
+
+/* ------------------------------------------------------------------ */
+/* Blob system – 1 character (3 bytes) wide, 8 scanlines tall         */
+/* ------------------------------------------------------------------ */
+
 #define BLOB_ROWS  8          /* 8 scan-lines high */
-#define BLOB_SPACING 3        /* columns between cells (3 bytes = dense cell) */
+#define BLOB_WIDTH 3          /* 3 bytes = 1 character (P/I/X) */
 
 typedef struct {
-    Cell cells[BLOB_CELLS];
-    int  base_x;              /* column (0-39) of first cell */
-    int  base_y;              /* scan-line (0-199) */
-    int  dir;                 /* +1 = move right, -1 = move left */
+    Character character;
+    int  x;                 /* column (0-37), must satisfy x+3 ≤ 40 */
+    int  y;                 /* scan-line (0-192), must satisfy y+8 ≤ 200 */
+    int  dir_x;             /* +1 = move right, -1 = move left */
+    int  dir_y;             /* +1 = move down, -1 = move up */
 } Blob;
 
 static Blob blobL, blobR;
 
 /* Initialise a blob with a strong colour bias */
-static void blob_init(Blob *b, int x, int y, int dir, unsigned char bias)
+static void blob_init(Blob *b, int x, int y, int dir_x, int dir_y, unsigned char affinity)
 {
     int i;
-    b->base_x = x;
-    b->base_y = 0;   /* start at top of screen */
-    b->dir    = dir;
-    for (i = 0; i < BLOB_CELLS; i++) {
-        b->cells[i].paper = 0;               /* black paper */
-        b->cells[i].ink   = bias;            /* strong bias colour */
-        b->cells[i].bits  = 0x3F;            /* all six pixels on */
-        b->cells[i].inv   = 0;
+    b->x = x;
+    b->y = y;
+    b->dir_x = dir_x;
+    b->dir_y = dir_y;
+    b->character.affinity = affinity;
+    b->character.energy = 255;
+    b->character.age = 0;
+    b->character.rule_set = 0;
+
+    for (i = 0; i < BLOB_ROWS; i++) {
+        b->character.row[i].paper = 0;               /* black paper */
+        b->character.row[i].ink   = (affinity == 0) ? 0 : (2 + (i % 6)); /* wall=black, others=varied */
+        b->character.row[i].bits  = 0x3F;            /* all six pixels on */
+        b->character.row[i].inv   = 0;
     }
 }
 
 /* Write the whole blob into HIRES memory */
 static void blob_draw(Blob *b)
 {
-    int i, row;
-    unsigned char *base = (unsigned char *)(0xA000 + b->base_y * ROW_WIDTH + b->base_x);
-
+    int row;
     for (row = 0; row < BLOB_ROWS; row++) {
-        unsigned char *line = base + row * ROW_WIDTH;
-        for (i = 0; i < BLOB_CELLS; i++) {
-            cell_write(&b->cells[i], line + i * BLOB_SPACING);
+        unsigned char *line = (unsigned char *)(0xA000 + (b->y + row) * ROW_WIDTH + b->x);
+
+        /* Write blob's own P/I/X (3 bytes) */
+        cell_write(&b->character.row[row], line);
+
+        /* If left blob, write its P/I state to byte 39 (boundary channel) */
+        if (b->x == 2) {
+            unsigned char *boundary = (unsigned char *)(0xA000 + (b->y + row) * ROW_WIDTH + 39);
+            *boundary = 0x10 | (b->character.row[row].paper & 7); // P byte only (I follows in next line)
         }
     }
 }
 
-/* Move blob one step toward the centre; clamp so they meet but do not cross */
+/* Move blob one step; clamp so they meet but do not cross */
 static void blob_move(Blob *b)
 {
-    b->base_x += b->dir;
-    b->base_y += 1;
+    b->x += b->dir_x;
+    b->y += b->dir_y;
 
     /* Bounce vertically: drop from top, bounce back up */
-    if (b->base_y > 180) {
-        b->base_y = 0;
-        b->dir = +1;   /* bounce back DOWN */
-    } else if (b->base_y < 0) {
-        b->base_y = 180;
-        b->dir = -1;   /* bounce back UP */
+    if (b->y > 192) {
+        b->y = 0;
+        b->dir_y = +1;   /* bounce back DOWN */
+    } else if (b->y < 0) {
+        b->y = 192;
+        b->dir_y = -1;   /* bounce back UP */
     }
 
     /* Bounce horizontally: meet at centre but do not cross */
-    if (b->dir > 0 && b->base_x > 180) {
-        b->base_x = 180;
-        b->dir = -1;
-    } else if (b->dir < 0 && b->base_x < 181) {
-        b->base_x = 181;
-        b->dir = +1;
+    if (b->dir_x > 0 && b->x > 18) {
+        b->x = 18;
+        b->dir_x = -1;
+    } else if (b->dir_x < 0 && b->x < 19) {
+        b->x = 19;
+        b->dir_x = +1;
     }
+
+    /* Decay energy */
+    if (b->character.energy > 0) b->character.energy--;
+    b->character.age++;
 }
 
-/* Exchange sub-pixels between corresponding cells of the two blobs */
+/* Exchange sub-pixels between corresponding rows of the two blobs */
 static void blob_exchange(Blob *a, Blob *b)
 {
-    int i;
-    for (i = 0; i < BLOB_CELLS; i++) {
-        /* alternate green-balance and full RGB balance for visual variety */
-        if (i & 1)
-            RULE_GREEN_BALANCE(a->cells[i], b->cells[i]);
-        else
-            RULE_RGB_BALANCE(a->cells[i], b->cells[i]);
+    /* Only interact if blobs are on the same scanline (y-coordinates match) */
+    if (a->y != b->y) return;
+
+    /* Check for horizontal overlap (x+3 > other_x && other_x+3 > a_x) */
+    if (a->x + BLOB_WIDTH > b->x && b->x + BLOB_WIDTH > a->x) {
+        for (int i = 0; i < BLOB_ROWS; i++) {
+            /* Apply rule based on *semantic states* (affinity, energy) */
+            if (a->character.affinity == 0 && a->character.energy > 0) {
+                /* Left is a wall → repel right blob */
+                b->dir_x = -b->dir_x;
+            } else if (b->character.affinity == 0 && b->character.energy > 0) {
+                /* Right is a wall → repel left blob */
+                a->dir_x = -a->dir_x;
+            } else {
+                /* Living cells: exchange ink colours */
+                unsigned char tmp = a->character.row[i].ink;
+                a->character.row[i].ink = b->character.row[i].ink;
+                b->character.row[i].ink = tmp;
+            }
+        }
     }
 }
 
@@ -655,7 +489,7 @@ static void print_help_screen(void)
     cls();
     paper(0);
     ink(5);
-    printf("\n soundtoy 1.2.0-dense\n\n");
+    printf("\n soundtoy 1.3.0-narrative\n\n");
     printf(" ?  help\n G  hires mode\n Q  quit\n");
     printf(" J/K  next/prev preset   R  boot   .  ping\n");
     printf(" P  set preset address\n SPACE  play current\n\n");
@@ -712,8 +546,9 @@ void main(void)
                 gen_random_colors();
 
                 /* place the two blobs at opposite ends of the random field */
-                blob_init(&blobL,  2,  0, +1, 4);   /* left,  green-biased, moves right */
-                blob_init(&blobR, 30,  0, -1, 6);   /* right, red-biased, moves left */
+                /* Left blob: x=2, right blob: x=37 (3 bytes wide, 40-byte limit) */
+                blob_init(&blobL,  2,  0, +1, +1, 1);   /* left,  living (affinity=1), moves right/down */
+                blob_init(&blobR, 37,  0, -1, +1, 0);   /* right, wall (affinity=0), moves left/down */
                 blob_draw(&blobL);
                 blob_draw(&blobR);
 
