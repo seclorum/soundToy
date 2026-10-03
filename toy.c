@@ -452,20 +452,20 @@ static void blob_move(Blob *b)
     b->base_y += 1;
 
     /* Bounce vertically: drop from top, bounce back up */
-    if (b->base_y > 18) {
+    if (b->base_y > 180) {
         b->base_y = 0;
         b->dir = +1;   /* bounce back DOWN */
     } else if (b->base_y < 0) {
-        b->base_y = 18;
+        b->base_y = 180;
         b->dir = -1;   /* bounce back UP */
     }
 
     /* Bounce horizontally: meet at centre but do not cross */
-    if (b->dir > 0 && b->base_x > 18) {
-        b->base_x = 18;
+    if (b->dir > 0 && b->base_x > 180) {
+        b->base_x = 180;
         b->dir = -1;
-    } else if (b->dir < 0 && b->base_x < 19) {
-        b->base_x = 19;
+    } else if (b->dir < 0 && b->base_x < 181) {
+        b->base_x = 181;
         b->dir = +1;
     }
 }
