@@ -2,3 +2,4 @@ BUILD/**
 .DS_Store**/**
 cscope.out
 .aider*
+debug/raw*.log
