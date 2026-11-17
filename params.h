@@ -76,5 +76,8 @@
 #define via_ifr                 $030D 
 #define via_ier                 $030E 
 #define via_porta               $030f 
+; (no via_ay_reg/via_ay_data: the AY hangs off portA+PCR strobes, see
+;  _synth_safe/_ScanKeyboard in keyboard.s - $0308/$0310 are VIA T2CL /
+;  the ACIA region and must not be written as AY ports)
 
-#include "scripting.h"
+//#include "scripting.h"
