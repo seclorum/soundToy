@@ -3,15 +3,11 @@
 ::
 :: Set the build paremeters
 ::
-SET OSDKADDR=$550
-<<<<<<< HEAD
+SET OSDKADDR=$600
 SET OSDKNAME=STOY
-SET OSDKFILE=toy soundtoy picture qrandom attrsyn 
-;; simpio1 
-=======
-SET OSDKNAME=SOUNDTOY
-SET OSDKFILE=toy soundtoy picture qrandom attrsyn simpio1 shifter
->>>>>>> b16fda6b57fb9ee80a6fbd79d60430240b223d68
+SET OSDKFILE=toy soundtoy shimmer keyboard picture qrandom attrsyn 
+:: ipsemdem
+:: simpio1 
 :: zpdump
 :: keyboard 
 :: spamit fastbloop randcog rantab

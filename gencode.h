@@ -1,5 +1,27 @@
 /*
- * pre-generated code block 
+ * displayInstructions is one contiguous 6502 routine.
+ *
+ * Each 51-byte block copies ONE byte column over 8 scanlines.
+ *
+ * 40 blocks are available.
+ *
+ * The first 39 blocks end in NOP and therefore fall through into
+ * the next block.
+ *
+ * The final block ends in RTS.
+ *
+ * Do not call displayInstructions[n] directly.
+ *
+ * The complete routine is:
+ *
+ *     call((unsigned int)&displayInstructions[0]);
+ *
+ * For a 6x8 dense Character:
+ *
+ *     1 Character = 3 byte columns
+ *     13 Characters = 39 instructions
+ *
+ * leaving instruction 39 available as a spare.
  */
 
  // be sure to update displayInstructions
