@@ -567,13 +567,12 @@ ar_prefix
         sta ar_pw
         sta ar_iw
         sta ar_vw
-        ldx ar_x
+        ldy ar_x
         beq arpd
-        dex
-arp_l:  txa
-        tay
+        dey                    ; Y = x-1 downto 0 (counter AND index)
+arp_l
 ar_ld1  lda $ffff,Y           ; row[k], operand = &row[0] (per row)
-        tax
+        tax                   ; byte in X; Y untouched (loop counter)
         and #$60
         bne arpn              ; pixel byte: render state untouched
         txa
@@ -589,7 +588,7 @@ ar_ld1  lda $ffff,Y           ; row[k], operand = &row[0] (per row)
 arpink: txa
         and #$07
         sta ar_iw
-arpn:   dex
+arpn:   dey
         bpl arp_l
 arpd:   rts
 
