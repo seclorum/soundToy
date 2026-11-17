@@ -1,2 +1,4 @@
 BUILD/**
 .DS_Store**/**
+**/.DS_Store*
+**cscope.out*

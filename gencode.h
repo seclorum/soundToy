@@ -9,31 +9,62 @@
 #define MAX_CB_DISPLAY_INSTRUCTIONS 40
 
 // aliases for positions in the displayInstructions
+
+// a char is considerd a 'sprite char' if it can co-exist with the two sprites on each side of it, horizontally
+// sprites that impact each other have various 'degrees' of application
+// we collect in the displayInstructions a 'set' of spritechars of various application
+// SEXY TOY 	cute little things that have been found that can co-exist
 #define STOY1 0
 #define STOY2 1
 #define STOY3 2
-#define SAVE1 3
+// SAVE SPOT	the lower-right coordinate of the playfield, 'safest' of all
+#define SAFE1 3
+// CURSOR      	the cursor location(s)
 #define CURS1 4
 #define CURS2 5
+// ANIMATION	the animation(s)
 #define ANIM1 6
 #define ANIM2 7
 #define ANIM3 8
 #define ANIM4 9
 #define ANIM5 10
 #define ANIM6 11
+// MONO SCHAR	monochrome-only schars
 #define MONO1 12
 #define MONO2 13
-#define COLR1 14
-#define COLR2 15
-#define UIRI1 16
-#define UIRI2 17
-#define UIRI3 18
-#define COLR2 19
-#define COLR3 20
-#define COLR4 21
-#define COLR5 22
-#define COLR6 23
+#define MONO3 14
+#define MONO4 15
+// COLOR SCHAR	color-only schars
+#define COLR1 16
+#define COLR2 17
+#define COLR3 18
+#define COLR4 19
+// VIRUS SCHAR	guaranteed destructive schars
+#define UIRI1 20
+#define UIRI2 21
+#define UIRI3 22
+#define UIRI4 23
+// WALL SCHAR	guaranteed safe background chars
+#define WALL1 24
+#define WALL2 25
+#define WALL3 26
+#define WALL4 27
+#define WALL5 28
+#define WALL6 29
+#define WALL7 30
+#define WALL8 31
+// SPRITE SCHAR	guaranteed safe sprite chars
+#define CSPR1 32
+#define CSPR2 33
+#define CSPR3 34
+#define CSPR4 35
+#define CSPR5 36
+#define CSPR6 37
+#define CSPR7 38
+#define CSPR8 39
 
+// the end of the line/last displayInstruction before the RET
+#define EOLX1 40
 
 // Predefined op code block (LDA, STA sequence for MAX_CB_DISPLAY_INSTRUCTIONS rows)
 unsigned char displayInstructions[MAX_CB_DISPLAY_INSTRUCTIONS][51] = {
