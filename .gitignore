@@ -6,3 +6,4 @@ debug/raw*.log
 OSDK.toolchain/**
 oricutron.seclorum.tar
 oricutron.seclorum/
+debug/bps.txt
